@@ -14,6 +14,7 @@ workflow CheckSamplesUnique {
   input {
     Int sample_num_threshold = 50
   }
+}
 
 workflow HapCNA {
   input {
