@@ -10,12 +10,6 @@ import "https://api.firecloud.org/ga4gh/v1/tools/Joint_geno:JointGeno_Tasks/vers
 import "https://api.firecloud.org/ga4gh/v1/tools/ICON_Tasks:ICON_Tasks_paired/versions/2/plain-WDL/descriptor" as ICTasks
 
 # WORKFLOW DEFINITION 
-workflow CheckSamplesUnique {
-  input {
-    Int sample_num_threshold = 50
-  }
-}
-
 workflow HapCNA {
   input {
     Int sample_num_threshold
