@@ -18,6 +18,7 @@ workflow CheckSamplesUnique {
 
 workflow HapCNA {
   input {
+    Int sample_num_threshold
     File tumor_input_bam
     File tumor_input_bam_index
     File normal_input_bam
