@@ -10,6 +10,11 @@ import "https://api.firecloud.org/ga4gh/v1/tools/Joint_geno:JointGeno_Tasks/vers
 import "https://api.firecloud.org/ga4gh/v1/tools/ICON_Tasks:ICON_Tasks_paired/versions/2/plain-WDL/descriptor" as ICTasks
 
 # WORKFLOW DEFINITION 
+workflow CheckSamplesUnique {
+  input {
+    Int sample_num_threshold = 50
+  }
+
 workflow HapCNA {
   input {
     File tumor_input_bam
@@ -247,7 +252,8 @@ workflow HapCNA {
   
   call JGTasks.CheckSamplesUnique {
     input:
-      sample_name_map = GenerateSampleMapFile.sample_map
+      sample_name_map = GenerateSampleMapFile.sample_map,
+      sample_num_threshold = sample_num_threshold
   }
 
   call JGTasks.SplitIntervalList {
