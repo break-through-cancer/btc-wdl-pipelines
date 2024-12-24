@@ -6,8 +6,8 @@ version 1.0
 
 ## Pipeline for Tumor-Normal analyses
 
-import "https://api.firecloud.org/ga4gh/v1/tools/Joint_geno:JointGeno_Tasks/versions/1/plain-WDL/descriptor" as JGTasks
-import "https://api.firecloud.org/ga4gh/v1/tools/ICON_Tasks:ICON_Tasks_paired/versions/2/plain-WDL/descriptor" as ICTasks
+import "https://raw.githubusercontent.com/break-through-cancer/btc-wdl-pipelines/refs/heads/iconicc/JointGeno_Tasks.1.wdl" as JGTasks
+import "https://raw.githubusercontent.com/break-through-cancer/btc-wdl-pipelines/refs/heads/iconicc/ICON_Tasks.2.wdl" as ICTasks
 
 # WORKFLOW DEFINITION 
 workflow HapCNA {
