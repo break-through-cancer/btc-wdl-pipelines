@@ -1,0 +1,15 @@
+{
+  "childProcessIds": [],
+  "code": {
+    "repository": "GITHUBPUBLIC",
+    "script": "ICONICC_paired.3.wdl",
+    "uri": "break-through-cancer/btc-wdl-pipelines",
+    "version": "main"
+  },
+  "desc": "ICONICC Pipeline",
+  "documentationUrl": "",
+  "executor": "CROMWELL",
+  "id": "iconicc",
+  "name": "ICONICC Paired",
+  "parentProcessIds": []
+}
