@@ -113,7 +113,8 @@ task ImportGVCFs {
       --sample-name-map ~{sample_name_map} \
       --reader-threads 5 \
       --merge-input-intervals \
-      --consolidate
+      --consolidate \
+      --tmp-dir=/tmp/scratch
 
     tar -cf ~{workspace_dir_name}.tar ~{workspace_dir_name}
   >>>
