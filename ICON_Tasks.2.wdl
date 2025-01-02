@@ -336,6 +336,9 @@ task GenerateSampleMapFile {
 
     with open("sample_map_file.txt", "w") as fi:
       for i in range(len(file_paths)):
+        # Remove 's3://' prefix if it exists
+        if file_paths[i].startswith("s3://"):
+            file_paths[i] = file_paths[i][5:]
         fi.write(sample_names[i] + "\t" + file_paths[i] + "\n") 
 
     CODE
