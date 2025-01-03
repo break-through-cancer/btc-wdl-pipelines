@@ -275,6 +275,9 @@ workflow HapCNA {
         sample_name_map = GenerateSampleMapFile.sample_map,
         tumor_gvcf_file = TumorMerge.output_vcf,
         normal_gvcf_file = NormalMerge.output_vcf,
+        tumor_gvcf_index = TumorMergeoutput_vcf_index,
+        normal_gvcf_index = NormalMerge.output_vcf_index,
+        
         interval = unpadded_intervals[idx],
         ref_fasta = ref_fasta,
         ref_fasta_index = ref_fasta_index,
