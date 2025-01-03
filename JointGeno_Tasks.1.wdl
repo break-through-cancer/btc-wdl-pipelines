@@ -78,6 +78,9 @@ task ImportGVCFs {
 
   input {
     File sample_name_map
+    File tumor_gvcf_file
+    File normal_gvcf_file
+
     File interval
     File ref_fasta
     File ref_fasta_index
