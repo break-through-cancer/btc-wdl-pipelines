@@ -335,6 +335,7 @@ workflow HapCNA {
           ref_fasta_index = ref_fasta_index,
           ref_dict = ref_dict,
           dbsnp_vcf = dbsnp_vcf,
+          dbsnp_vcf_index = dbsnp_vcf_index,
           disk_size = medium_disk
       }
     }
