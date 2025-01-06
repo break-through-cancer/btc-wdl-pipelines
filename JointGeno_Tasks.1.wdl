@@ -100,15 +100,16 @@ task ImportGVCFs {
     set -euo pipefail
 
     python3 << CODE
-      input_file = "~{sample_name_map}"
-      output_file = "processed.sample_map"
+    input_file = "~{sample_name_map}"
+    output_file = "processed.sample_map"
 
-      with open(input_file, "r") as infile, open(output_file, "w") as outfile:
-        for line in infile:
-            sample, path = line.strip().split("\t")
-            if path.startswith("s3://"):
-                path = path[5:]  # Remove 's3://'
-            outfile.write(sample + "\t" + path + "\n")
+    with open(input_file, "r") as infile, open(output_file, "w") as outfile:
+      for line in infile:
+          sample, path = line.strip().split("\t")
+          if path.startswith("s3://"):
+              path = path[5:]  # Remove 's3://'
+          outfile.write(sample + "\t" + path + "\n")
+          
     CODE
 
     rm -rf ~{workspace_dir_name}
