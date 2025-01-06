@@ -272,7 +272,7 @@ workflow HapCNA {
     # the Hellbender (GATK engine) team!
     call JGTasks.ImportGVCFs {
       input:
-        sample_name_map = GenerateSampleMapFile.sample_map,
+        sample_name_map = GenerateSampleMapFile.local_sample_map,
         tumor_gvcf_file = TumorMerge.output_vcf,
         normal_gvcf_file = NormalMerge.output_vcf,
         tumor_gvcf_index = TumorMerge.output_vcf_index,
@@ -593,7 +593,7 @@ workflow HapCNA {
       input:
         gvcf_paths = gvcf_paths,
         vcf_paths = ApplyRecalibration.recalibrated_vcf,
-        sample_name_map = GenerateSampleMapFile.sample_map,
+        sample_name_map = GenerateSampleMapFile.local_sample_map,
         haplotype_database = haplotype_database,
         output_base_name = participant_id
     }

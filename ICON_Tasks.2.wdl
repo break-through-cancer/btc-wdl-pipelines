@@ -334,12 +334,18 @@ task GenerateSampleMapFile {
       print("Number of File Paths does not Equal Number of File Names")
       exit(1)
 
-    with open("sample_map_file.txt", "w") as fi:
+    with open("~{outfile}", "w") as file_with_s3, open("local_~{outfile}", "w") as file_without_s3:
       for i in range(len(file_paths)):
-        fi.write(sample_names[i] + "\t" + file_paths[i] + "\n") 
+        sample = sample_names[i]
+        path = file_paths[i]
+        # Write original paths with s3:// for when sample map lines are passed as inputs
+        file_with_s3.write(sample + "\t" + path + "\n")
+        # Write modified paths without s3:// for when sample map is parsed locally in tasks
+        if path.startswith("s3://"):
+          path = path[5:]  # Remove 's3://'
+        file_without_s3.write(sample + "\t" + path + "\n")
 
     CODE
-    mv sample_map_file.txt ~{outfile}
     >>>
 
     runtime {
@@ -351,6 +357,7 @@ task GenerateSampleMapFile {
 
     output {
         File sample_map = outfile
+        File local_sample_map = "local_" + outfile
     }
 }
 
