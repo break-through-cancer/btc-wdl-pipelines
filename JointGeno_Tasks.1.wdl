@@ -99,6 +99,18 @@ task ImportGVCFs {
   command <<<
     set -euo pipefail
 
+    python3 << CODE
+      input_file = "~{sample_name_map}"
+      output_file = "processed.sample_map"
+
+      with open(input_file, "r") as infile, open(output_file, "w") as outfile:
+        for line in infile:
+            sample, path = line.strip().split("\t")
+            if path.startswith("s3://"):
+                path = path[5:]  # Remove 's3://'
+            outfile.write(sample + "\t" + path + "\n")
+    CODE
+
     rm -rf ~{workspace_dir_name}
 
     # We've seen some GenomicsDB performance regressions related to intervals, so we're going to pretend we only have a single interval
@@ -115,7 +127,7 @@ task ImportGVCFs {
       --genomicsdb-workspace-path ~{workspace_dir_name} \
       --batch-size ~{batch_size} \
       -L ~{interval} \
-      --sample-name-map ~{sample_name_map} \
+      --sample-name-map processed.sample_map \
       --reader-threads 5 \
       --merge-input-intervals \
       --consolidate
