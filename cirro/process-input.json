@@ -13,7 +13,7 @@
   "HapCNA.eval_interval_list": "s3://broad-references/hg38/v0/wgs_evaluation_regions.hg38.interval_list",
   "HapCNA.filt_probes": "s3://btc-refdata/iconicc/probes.rds",
   "HapCNA.geneticMap": "s3://btc-refdata/iconicc/reference-genome-genetic_map_hg38_withX.txt.gz",
-  "HapCNA.haplotype_database": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.haplotype_database.txt",
+  "HapCNA.haplotype_database": "s3://btc-refdata/iconicc/Homo_sapiens_assembly38.haplotype_database.txt",
   "HapCNA.hapmap_resource_vcf": "s3://broad-references/hg38/v0/hapmap_3.3.hg38.vcf.gz",
   "HapCNA.hapmap_resource_vcf_index": "s3://broad-references/hg38/v0/hapmap_3.3.hg38.vcf.gz.tbi",
   "HapCNA.mills_resource_vcf": "s3://broad-references/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
