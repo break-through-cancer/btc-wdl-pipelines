@@ -537,6 +537,7 @@ workflow HapCNA {
 
     scatter (idx in fingerprinting_indices) {
       File vcfs_to_fingerprint = HardFilterAndMakeSitesOnlyVcf.variant_filtered_vcf[idx]
+      File vcf_indices_to_fingerprint = HardFilterAndMakeSitesOnlyVcf.variant_filtered_vcf_index[idx]
     }
 
     call JGTasks.GatherVcfs as GatherFingerprintingVcfs {
@@ -568,6 +569,7 @@ workflow HapCNA {
         input:
           gvcf_paths = files_in_partition,
           vcf_paths = vcfs_to_fingerprint,
+          vcf_indices = vcf_indices_to_fingerprint,
           sample_name_map = GenerateSampleMapFile.sample_map,
           haplotype_database = haplotype_database,
           output_base_name = participant_id + "." + idx,
