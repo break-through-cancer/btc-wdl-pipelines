@@ -593,6 +593,7 @@ workflow HapCNA {
       input:
         gvcf_paths = gvcf_paths,
         vcf_paths = ApplyRecalibration.recalibrated_vcf,
+        vcf_indices = ApplyRecalibration.recalibrated_vcf_index,
         sample_name_map = GenerateSampleMapFile.local_sample_map,
         haplotype_database = haplotype_database,
         output_base_name = participant_id

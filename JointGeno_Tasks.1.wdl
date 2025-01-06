@@ -855,6 +855,7 @@ task CrossCheckFingerprint {
   input {
     Array[File] gvcf_paths
     Array[File] vcf_paths
+    Array[File] vcf_indices
     File sample_name_map
     File haplotype_database
     String output_base_name
