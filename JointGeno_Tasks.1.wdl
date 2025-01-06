@@ -206,7 +206,7 @@ task GnarlyGenotyper {
     File ref_fasta
     File ref_fasta_index
     File ref_dict
-    String dbsnp_vcf
+    File dbsnp_vcf
     Boolean make_annotation_db = false
 
     String gatk_docker = "us.gcr.io/broad-gatk/gatk:4.2.6.1"
