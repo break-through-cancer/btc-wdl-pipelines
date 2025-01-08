@@ -417,9 +417,9 @@ task iter_isec { #pending -O z working for wach file in the directory
         File refDir
         String participant_id
 
-        String memory = "256MiB"
-        Int timeMinutes = 1 + ceil(size(refDir, "G"))
-        String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
+        # String memory = "256MiB"
+        # Int timeMinutes = 1 + ceil(size(refDir, "G"))
+        # String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
 
         String dir_name = "hg38/1000G"
         String outDir = participant_id + "_tmp"
@@ -459,9 +459,9 @@ task iter_isec { #pending -O z working for wach file in the directory
     >>>
 
     runtime {
-        memory: memory
-        time_minutes: timeMinutes
-        docker: bcftools_dockerImage
+        memory: "256MiB"
+        # time_minutes: timeMinutes
+        docker: "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
         disks: "local-disk 2000 HDD"
     }
 
