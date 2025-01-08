@@ -3,6 +3,8 @@
   "final_call_logs_dir": "$.params.dataset.s3|/logs/",
   "memory_retry_multiplier": 2.0,
   "use_relative_output_paths": true,
+  "read_from_cache": true,
+  "write_to_cache": true,
 
   "HapCNA.sample_num_threshold": "2",
   "HapCNA.ac_rscript": "s3://btc-refdata/iconicc/reference-genome-AC_calc_20231228.R",
