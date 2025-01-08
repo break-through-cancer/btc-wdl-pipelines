@@ -373,7 +373,7 @@ task Filter {
 
         String memory = "256MiB"
         Int timeMinutes = 1 + ceil(size(input_vcf, "G"))
-        String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
+        String bcftools_dockerImage = "ghcr.io/break-through-cancer/bcftools-with-stat:latest"
     }
 
     command {
@@ -461,7 +461,7 @@ task iter_isec { #pending -O z working for wach file in the directory
     runtime {
         memory: "256MiB"
         # time_minutes: timeMinutes
-        docker: "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
+        docker: "ghcr.io/break-through-cancer/bcftools-with-stat:latest"
         disks: "local-disk 2000 HDD"
     }
 
@@ -485,7 +485,7 @@ task hetvarFilter { #this task also assumes that the first sample is germline;ta
 
         String memory = "256MiB"
         Int timeMinutes = 1 + ceil(size(chr_int, "G"))
-        String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
+        String bcftools_dockerImage = "ghcr.io/break-through-cancer/bcftools-with-stat:latest"
     }
 
     #String outname = basename(...)
@@ -574,7 +574,7 @@ task index {
 
         String memory = "256MiB"
         Int timeMinutes = 1 + ceil(size(phased_files, "G"))
-        String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
+        String bcftools_dockerImage = "ghcr.io/break-through-cancer/bcftools-with-stat:latest"
     }
 
     command <<<
@@ -609,7 +609,7 @@ task query {
 
         String memory = "4 GB"
         Int timeMinutes = 1 + ceil(size(all_het, "G"))
-        String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
+        String bcftools_dockerImage = "ghcr.io/break-through-cancer/bcftools-with-stat:latest"
         
     }
 
