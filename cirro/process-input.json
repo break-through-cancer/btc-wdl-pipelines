@@ -7,7 +7,7 @@
   "write_to_cache": true,
 
   "HapCNA.participant_id": "$.params.dataset.paramJson.participant_id",
-  "HapCNA.ref_dir1000G": "s3://btc-refdata/iconicc/reference-genome-1000G.tar",
+  "HapCNA.ref_dir1000G": "$.params.dataset.paramJson.ref_dir1000G",
   "HapCNA.filtered_outputVcf": "$.params.dataset.paramJson.input_bam",
   "HapCNA.filtered_outputVcfIndex": "$.params.dataset.paramJson.input_bam_index"
 }
