@@ -45,6 +45,7 @@ task iter_isec { #pending -O z working for wach file in the directory
   # String outDir = participant_id + "_tmp"
 
   command <<<
+    set -e
     echo "Received inputs:" > inputs.log
     echo "participant_id: ~{participant_id}" >> inputs.log
     echo "Input File: ~{input_vcf}" >> inputs.log
