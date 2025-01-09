@@ -51,6 +51,8 @@ task iter_isec { #pending -O z working for wach file in the directory
     echo "Input Index: ~{input_vcfindex}" >> inputs.log
     echo "Input Tar: ~{refDir}" >> inputs.log
     echo "Inputs validated successfully!" >> inputs.log
+
+    tar -xf ~{refDir}
   >>>
 
   runtime {
