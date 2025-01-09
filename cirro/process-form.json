@@ -9,61 +9,21 @@
         "description": "Identifier for the sample.",
         "default": ""
       },
-      "tumor_sample_id": {
+      "input_bam": {
         "type": "string",
-        "title": "tumor_sample_id",
-        "description": "",
-        "default": ""
-      },
-      "normal_sample_id": {
-        "type": "string",
-        "title": "normal_sample_id",
-        "description": "",
-        "default": ""
-      },
-      "tumor_input_bam": {
-        "type": "string",
-        "title": "tumor_input_bam",
+        "title": "input_bam",
         "description": "",
         "pathType": "dataset",
         "file": "**/*.bam"
       },
-      "tumor_input_bam_index": {
+      "input_bam_index": {
         "type": "string",
-        "title": "tumor_input_bam_index",
+        "title": "input_bam_index",
         "description": "",
         "pathType": "dataset",
         "file": "**/*.bam.bai"
-      },
-      "normal_input_bam": {
-        "type": "string",
-        "title": "normal_input_bam",
-        "description": "",
-        "pathType": "dataset",
-        "file": "**/*.bam"
-      },
-      "normal_input_bam_index": {
-        "type": "string",
-        "title": "normal_input_bam_index",
-        "description": "",
-        "pathType": "dataset",
-        "file": "**/*.bam.bai"
-      },
-      "sample_sex": {
-        "type": "string",
-        "title": "",
-        "enum": [
-          "",
-          "male",
-          "female"
-        ],
-        "default": ""
       }
     }
   },
-  "ui": {
-    "sample_sex": {
-      "ui:widget": "radio"
-    }
-  }
+  "ui": {}
 }
