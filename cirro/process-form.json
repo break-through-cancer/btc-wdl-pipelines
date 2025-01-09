@@ -14,14 +14,14 @@
         "title": "input_bam",
         "description": "",
         "pathType": "dataset",
-        "file": "**/*.bam"
+        "file": "**/*.vcf.gz"
       },
       "input_bam_index": {
         "type": "string",
         "title": "input_bam_index",
         "description": "",
         "pathType": "dataset",
-        "file": "**/*.bam.bai"
+        "file": "**/*.vcf.gz.tbi"
       }
     }
   },
