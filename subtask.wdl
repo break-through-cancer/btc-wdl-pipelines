@@ -41,19 +41,27 @@ task iter_isec { #pending -O z working for wach file in the directory
     # String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
   }
 
-  # String dir_name = "hg38/1000G"
-  # String outDir = participant_id + "_tmp"
+  String dir_name = "hg38/1000G"
+  String outDir = participant_id + "_tmp"
 
   command <<<
     set -e
-    echo "Received inputs:" > inputs.log
-    echo "participant_id: ~{participant_id}" >> inputs.log
-    echo "Input File: ~{input_vcf}" >> inputs.log
-    echo "Input Index: ~{input_vcfindex}" >> inputs.log
-    echo "Input Tar: ~{refDir}" >> inputs.log
-    echo "Inputs validated successfully!" >> inputs.log
-
     tar -xf ~{refDir}
+    for i in {1..2} X
+      do
+        echo "We are on iteration: ${i}"
+        bcftools \
+        isec \
+        ~{input_vcf} \
+        ~{dir_name}/chr${i}.1000G.genotypes.bcf \
+        -w 1 \
+        -O z \
+        -p ~{outDir}
+        mv ~{outDir}/0002.vcf.gz ~{participant_id}"_chr${i}_var.vcf.gz"
+        mv ~{outDir}/0002.vcf.gz.tbi ~{participant_id}"_chr${i}_var.vcf.gz.tbi"
+        cp -f ~{outDir}/0000.vcf.gz ~{input_vcf}
+        cp -f ~{outDir}/0000.vcf.gz.tbi ~{input_vcfindex}
+      done
   >>>
 
   runtime {
