@@ -17,11 +17,11 @@ workflow HapCNA {
   }
 
   output{
-    String message = iter_isec.message
-    # File final_rem = iter_isec.final_rem
-    # File final_remindex = iter_isec.final_remindex
-    # Array[File] chr_int = iter_isec.chr_int
-    # Array[File] chr_int_indices = iter_isec.chr_int_indices
+    # String message = iter_isec.message
+    File final_rem = iter_isec.final_rem
+    File final_remindex = iter_isec.final_remindex
+    Array[File] chr_int = iter_isec.chr_int
+    Array[File] chr_int_indices = iter_isec.chr_int_indices
   }
 
   meta {
@@ -72,11 +72,11 @@ task iter_isec { #pending -O z working for wach file in the directory
   }
 
   output {
-    File log = "inputs.log"
-    String message = read_string("inputs.log")
-    # File final_rem = input_vcf
-    # File final_remindex = input_vcfindex
-    # Array[File] chr_int = glob('*_var.vcf.gz')
-    # Array[File] chr_int_indices = glob('*_var.vcf.gz.tbi')
+    # File log = "inputs.log"
+    # String message = read_string("inputs.log")
+    File final_rem = input_vcf
+    File final_remindex = input_vcfindex
+    Array[File] chr_int = glob('*_var.vcf.gz')
+    Array[File] chr_int_indices = glob('*_var.vcf.gz.tbi')
   }
 }
