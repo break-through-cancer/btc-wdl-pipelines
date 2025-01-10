@@ -3,7 +3,6 @@
   "final_call_logs_dir": "$.params.dataset.s3|/logs/",
   "memory_retry_multiplier": 2.0,
   "use_relative_output_paths": true,
-  "read_from_cache": true,
   "write_to_cache": true,
 
   "HapCNA.participant_id": "$.params.dataset.paramJson.participant_id",
