@@ -47,7 +47,7 @@ task iter_isec { #pending -O z working for wach file in the directory
   command <<<
     set -e
     
-    mkdir -p outDir/chr_outputs
+    mkdir -p outDir
 
     tar -xf ~{refDir}
     for i in {1..2} X
@@ -60,10 +60,10 @@ task iter_isec { #pending -O z working for wach file in the directory
       -w 1 \
       -O z \
       -p ~{outDir}
-      mv ~{outDir}/0002.vcf.gz outDir/chr_outputs/~{participant_id}_chr${i}_var.vcf.gz
-      mv ~{outDir}/0002.vcf.gz.tbi outDir/chr_outputs/~{participant_id}_chr${i}_var.vcf.gz.tbi
-      cp -f ~{outDir}/0000.vcf.gz ~{input_vcf}
-      cp -f ~{outDir}/0000.vcf.gz.tbi ~{input_vcfindex}
+      mv ~{outDir}/0002.vcf.gz outDir/~{participant_id}_chr${i}_var.vcf.gz
+      mv ~{outDir}/0002.vcf.gz.tbi outDir/~{participant_id}_chr${i}_var.vcf.gz.tbi
+      cp -f ~{outDir}/0000.vcf.gz ~{participant_id}_isec.vcf.gz
+      cp -f ~{outDir}/0000.vcf.gz.tbi ~{participant_id}_isec.vcf.gz.tbi
     done
   >>>
 
@@ -75,9 +75,9 @@ task iter_isec { #pending -O z working for wach file in the directory
   }
 
   output {
-    File final_rem = input_vcf
-    File final_remindex = input_vcfindex
-    Array[File] chr_int = glob("outDir/chr_outputs/*_var.vcf.gz")
-    Array[File] chr_int_indices = glob("outDir/chr_outputs/*_var.vcf.gz.tbi")
+    File final_rem = "~{participant_id}_isec.vcf.gz"
+    File final_remindex = "~{participant_id}_isec.vcf.gz.tbi"
+    Array[File] chr_int = glob("outDir/*_var.vcf.gz")
+    Array[File] chr_int_indices = glob("outDir/*_var.vcf.gz.tbi")
   }
 }
