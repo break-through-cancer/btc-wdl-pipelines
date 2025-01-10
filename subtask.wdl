@@ -47,11 +47,12 @@ task iter_isec { #pending -O z working for wach file in the directory
 
   String dir_name = "hg38/1000G"
   String outDir = participant_id + "_tmp"
+  String outFile = participant_id + "_isec.vcf.gz"
 
   command <<<
     set -e
     
-    mkdir -p ~{outDir}
+    mkdir -p ~{outDir}/chr_outputs
 
     tar -xf ~{refDir}
     for i in {1..2} X
@@ -64,10 +65,10 @@ task iter_isec { #pending -O z working for wach file in the directory
       -w 1 \
       -O z \
       -p ~{outDir}
-      mv ~{outDir}/0002.vcf.gz outDir/~{participant_id}_chr${i}_var.vcf.gz
-      mv ~{outDir}/0002.vcf.gz.tbi outDir/~{participant_id}_chr${i}_var.vcf.gz.tbi
-      cp -f ~{outDir}/0000.vcf.gz ~{participant_id}_isec.vcf.gz
-      cp -f ~{outDir}/0000.vcf.gz.tbi ~{participant_id}_isec.vcf.gz.tbi
+      mv ~{outDir}/0002.vcf.gz ~{outDir}/chr_outputs/~{participant_id}_chr${i}_var.vcf.gz
+      mv ~{outDir}/0002.vcf.gz.tbi ~{outDir}/chr_outputs/~{participant_id}_chr${i}_var.vcf.gz.tbi
+      cp -f ~{outDir}/0000.vcf.gz ~{outFile}
+      cp -f ~{outDir}/0000.vcf.gz.tbi ~{outFile}.tbi
     done
   >>>
 
@@ -79,10 +80,10 @@ task iter_isec { #pending -O z working for wach file in the directory
   }
 
   output {
-    File final_rem = "~{participant_id}_isec.vcf.gz"
-    File final_remindex = "~{participant_id}_isec.vcf.gz.tbi"
-    Array[File] chr_int = glob("~{outDir}/*_var.vcf.gz")
-    Array[File] chr_int_indices = glob("~{outDir}/*_var.vcf.gz.tbi")
+    File final_rem = outFile
+    File final_remindex = outFile + ".tbi"
+    Array[File] chr_int = glob("~{outDir}/chr_outputs/*_var.vcf.gz")
+    Array[File] chr_int_indices = glob("~{outDir}/chr_outputs/*_var.vcf.gz.tbi")
   }
 }
 
