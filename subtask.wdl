@@ -68,7 +68,7 @@ task iter_isec { #pending -O z working for wach file in the directory
   >>>
 
   runtime {
-    memory: "256MiB"
+    memory: "512MiB"
     # time_minutes: timeMinutes
     docker: "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
     disks: "local-disk 2000 HDD"
