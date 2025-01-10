@@ -9,5 +9,7 @@
   "HapCNA.participant_id": "$.params.dataset.paramJson.participant_id",
   "HapCNA.ref_dir1000G": "$.params.dataset.paramJson.ref_dir1000G",
   "HapCNA.filtered_outputVcf": "$.params.dataset.paramJson.input_bam",
-  "HapCNA.filtered_outputVcfIndex": "$.params.dataset.paramJson.input_bam_index"
+  "HapCNA.filtered_outputVcfIndex": "$.params.dataset.paramJson.input_bam_index",
+  "HapCNA.geneticMap": "s3://btc-refdata/iconicc/reference-genome-genetic_map_hg38_withX.txt.gz"
+
 }
