@@ -106,21 +106,23 @@ task hetvarFilter { #this task also assumes that the first sample is germline;ta
     String outDir = participant_id + "_tmp"
 
     command <<<
-        set -e
-        for chr in ~{sep=' ' chr_int}
-        do
-            echo "We are on iteration: ${chr}"
-            filename=`basename "${chr}" "_var.vcf.gz"`"_het.vcf.gz"
-            bcftools \
-            filter \
-            -i 'GT[1]="het" & FORMAT/AD[1:0]>=5 & FORMAT/AD[1:1]>=5' \
-            ~{"-e" + exclude} \
-            ~{"-s" + softFilter} \
-            "${chr}" \
-            -O z \
-            -o "~{outDir}/${filename}"
-            bcftools index --tbi "~{outDir}/${filename}"
-        done
+      mkdir -p test_tmp
+
+      set -e
+      for chr in ~{sep=' ' chr_int}
+      do
+        echo "We are on iteration: ${chr}"
+        filename=`basename "${chr}" "_var.vcf.gz"`"_het.vcf.gz"
+        bcftools \
+        filter \
+        -i 'GT[1]="het" & FORMAT/AD[1:0]>=5 & FORMAT/AD[1:1]>=5' \
+        ~{"-e" + exclude} \
+        ~{"-s" + softFilter} \
+        "${chr}" \
+        -O z \
+        -o "~{outDir}/${filename}"
+        bcftools index --tbi "~{outDir}/${filename}"
+      done
     >>>
 
     output {
