@@ -46,22 +46,25 @@ task iter_isec { #pending -O z working for wach file in the directory
 
   command <<<
     set -e
+    
+    mkdir -p outDir/chr_outputs
+
     tar -xf ~{refDir}
     for i in {1..2} X
-      do
-        echo "We are on iteration: ${i}"
-        bcftools \
-        isec \
-        ~{input_vcf} \
-        ~{dir_name}/chr${i}.1000G.genotypes.bcf \
-        -w 1 \
-        -O z \
-        -p ~{outDir}
-        mv ~{outDir}/0002.vcf.gz ~{participant_id}"_chr${i}_var.vcf.gz"
-        mv ~{outDir}/0002.vcf.gz.tbi ~{participant_id}"_chr${i}_var.vcf.gz.tbi"
-        cp -f ~{outDir}/0000.vcf.gz ~{input_vcf}
-        cp -f ~{outDir}/0000.vcf.gz.tbi ~{input_vcfindex}
-      done
+    do
+      echo "We are on iteration: ${i}"
+      bcftools \
+      isec \
+      ~{input_vcf} \
+      ~{dir_name}/chr${i}.1000G.genotypes.bcf \
+      -w 1 \
+      -O z \
+      -p ~{outDir}
+      mv ~{outDir}/0002.vcf.gz outDir/chr_outputs/~{participant_id}_chr${i}_var.vcf.gz
+      mv ~{outDir}/0002.vcf.gz.tbi outDir/chr_outputs/~{participant_id}_chr${i}_var.vcf.gz.tbi
+      cp -f ~{outDir}/0000.vcf.gz ~{input_vcf}
+      cp -f ~{outDir}/0000.vcf.gz.tbi ~{input_vcfindex}
+    done
   >>>
 
   runtime {
@@ -72,11 +75,9 @@ task iter_isec { #pending -O z working for wach file in the directory
   }
 
   output {
-    # File log = "inputs.log"
-    # String message = read_string("inputs.log")
     File final_rem = input_vcf
     File final_remindex = input_vcfindex
-    # Array[File] chr_int = glob('*_var.vcf.gz')
-    # Array[File] chr_int_indices = glob('*_var.vcf.gz.tbi')
+    Array[File] chr_int = glob("outDir/chr_outputs/*_var.vcf.gz")
+    Array[File] chr_int_indices = glob("outDir/chr_outputs/*_var.vcf.gz.tbi")
   }
 }
