@@ -411,66 +411,57 @@ task Filter {
 }
 
 task iter_isec { #pending -O z working for wach file in the directory
-    input {
-        File input_vcf
-        File input_vcfindex
-        File refDir
-        String participant_id
+  input {
+    File input_vcf
+    File input_vcfindex
+    File refDir
+    String participant_id
 
-        # String memory = "256MiB"
-        # Int timeMinutes = 1 + ceil(size(refDir, "G"))
-        # String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
+    # String memory = "256MiB"
+    # Int timeMinutes = 1 + ceil(size(refDir, "G"))
+    # String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
+  }
 
-        String dir_name = "hg38/1000G"
-        String outDir = participant_id + "_tmp"
-    }
+  String dir_name = "hg38/1000G"
+  String outDir = participant_id + "_tmp"
+  String outFile = participant_id + "_isec.vcf.gz"
 
-    command <<<
-        set -e
-        tar -xf ~{refDir}
-        for i in {1..22}
-        do
-            echo "We are on iteration: ${i}"
-            bcftools \
-            isec \
-            ~{input_vcf} \
-            ~{dir_name}/chr${i}.1000G.genotypes.bcf \
-            -w 1 \
-            -O z \
-            -p ~{outDir}
-            mv ~{outDir}/0002.vcf.gz ~{participant_id}"_chr${i}_var.vcf.gz"
-            mv ~{outDir}/0002.vcf.gz.tbi ~{participant_id}"_chr${i}_var.vcf.gz.tbi"
-            cp -f ~{outDir}/0000.vcf.gz ~{input_vcf}
-            cp -f ~{outDir}/0000.vcf.gz.tbi ~{input_vcfindex}
-        done
+  command <<<
+    set -e
     
-        echo "We are on iteration: X"
-        bcftools \
-        isec \
-        ~{input_vcf} \
-        ~{dir_name}/chrX.1000G.genotypes.bcf \
-        -w 1 \
-        -O z \
-        -p ~{outDir}
-        mv ~{outDir}/0002.vcf.gz ~{participant_id}"_chrX_var.vcf.gz"
-        mv ~{outDir}/0002.vcf.gz.tbi ~{participant_id}"_chrX_var.vcf.gz.tbi"
-        cp -f ~{outDir}/0000.vcf.gz ~{input_vcf}
-        cp -f ~{outDir}/0000.vcf.gz.tbi ~{input_vcfindex}
-    >>>
+    mkdir -p ~{outDir}/chr_outputs
 
-    runtime {
-        memory: "256MiB"
-        # time_minutes: timeMinutes
-        docker: "ghcr.io/break-through-cancer/bcftools-with-stat:latest"
-        disks: "local-disk 2000 HDD"
-    }
+    tar -xf ~{refDir}
+    for i in {1..22} X
+    do
+      echo "We are on iteration: ${i}"
+      bcftools \
+      isec \
+      ~{input_vcf} \
+      ~{dir_name}/chr${i}.1000G.genotypes.bcf \
+      -w 1 \
+      -O z \
+      -p ~{outDir}
+      mv ~{outDir}/0002.vcf.gz ~{outDir}/chr_outputs/~{participant_id}_chr${i}_var.vcf.gz
+      mv ~{outDir}/0002.vcf.gz.tbi ~{outDir}/chr_outputs/~{participant_id}_chr${i}_var.vcf.gz.tbi
+      cp -f ~{outDir}/0000.vcf.gz ~{outFile}
+      cp -f ~{outDir}/0000.vcf.gz.tbi ~{outFile}.tbi
+    done
+  >>>
 
-    output {
-        File final_rem = input_vcf
-        File final_remindex = input_vcfindex
-        Array[File] chr_int = glob('*_var.vcf.gz')
-        Array[File] chr_int_indices = glob('*_var.vcf.gz.tbi')
-    }
+  runtime {
+    memory: "512MiB"
+    # time_minutes: timeMinutes
+    docker: "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
+    disks: "local-disk 2000 HDD"
+  }
+
+  output {
+    File final_rem = outFile
+    File final_remindex = outFile + ".tbi"
+    Array[File] chr_int = glob("~{outDir}/chr_outputs/*_var.vcf.gz")
+    Array[File] chr_int_indices = glob("~{outDir}/chr_outputs/*_var.vcf.gz.tbi")
+  }
 }
 
 task hetvarFilter { #this task also assumes that the first sample is germline;take out the refDir extraction
@@ -485,33 +476,36 @@ task hetvarFilter { #this task also assumes that the first sample is germline;ta
 
         String memory = "256MiB"
         Int timeMinutes = 1 + ceil(size(chr_int, "G"))
-        String bcftools_dockerImage = "ghcr.io/break-through-cancer/bcftools-with-stat:latest"
+        String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
     }
 
     #String outname = basename(...)
+    String outDir = participant_id + "_tmp"
 
     command <<<
-        set -e
-        for chr in ~{sep=' ' chr_int}
-        do
-            echo "We are on iteration: ${chr}"
-            filename=`basename "${chr}" "_var.vcf.gz"`"_het.vcf.gz"
-            bcftools \
-            filter \
-            -i 'GT[1]="het" & FORMAT/AD[1:0]>=5 & FORMAT/AD[1:1]>=5' \
-            ~{"-e" + exclude} \
-            ~{"-s" + softFilter} \
-            "${chr}" \
-            -O z \
-            -o "${filename}"
-            bcftools index --tbi "${filename}"
-        done
+      mkdir -p ~{outDir}
+
+      set -e
+      for chr in ~{sep=' ' chr_int}
+      do
+        echo "We are on iteration: ${chr}"
+        filename=`basename "${chr}" "_var.vcf.gz"`"_het.vcf.gz"
+        bcftools \
+        filter \
+        -i 'GT[1]="het" & FORMAT/AD[1:0]>=5 & FORMAT/AD[1:1]>=5' \
+        ~{"-e" + exclude} \
+        ~{"-s" + softFilter} \
+        "${chr}" \
+        -O z \
+        -o "~{outDir}/${filename}"
+        bcftools index --tbi "~{outDir}/${filename}"
+      done
     >>>
 
     output {
-        Array[File] het_filteredandIndex = glob('*_het.vcf.g*')
-        Array[File] het_filteredonly = glob('*_het.vcf.gz')
-        Array[File] het_filteredIndex = glob('*_het.vcf.gz.tbi')
+        Array[File] het_filteredandIndex = glob('~{outDir}/*_het.vcf.g*')
+        Array[File] het_filteredonly = glob('~{outDir}/*_het.vcf.gz')
+        Array[File] het_filteredIndex = glob('~{outDir}/*_het.vcf.gz.tbi')
     }
 
     runtime {
@@ -533,9 +527,13 @@ task eagle_phasing{
 
     }
         String dir_name = "hg38/1000G"
+        String outDir = "outDir"
+
 
     command <<<
         set -e
+        mkdir -p ~{outDir}
+
         tar -xf ~{refDir}
         for path in ~{sep=' ' het_var}
         do
@@ -550,14 +548,14 @@ task eagle_phasing{
               --vcfRef=~{dir_name}/chr${chr}.1000G.genotypes.bcf \
               --geneticMapFile=~{eagle_gm} \
               --chrom=chr${chr} \
-              --outPrefix="${filename}" \
+              --outPrefix="~{outDir}/${filename}" \
               --numThreads=12
             fi
         done
     >>>
 
     output{
-        Array[File] eagle_phased = glob('*_het_eagle2phased.vcf.gz')
+        Array[File] eagle_phased = glob('~{outDir}/*_het_eagle2phased.vcf.gz')
     }
 
     runtime{
@@ -579,16 +577,17 @@ task index {
 
     command <<<
         set -e
+        mkdir -p outDir
         for path in ~{sep=' ' phased_files}
         do
            echo "We are on ${path}"
            outfilename=`basename "${path}" "_het_eagle2phased.vcf.gz"`"_het_eagle2phased.vcf.gz.tbi"
-           bcftools index --tbi "${path}" -o "${outfilename}"
+           bcftools index --tbi "${path}" -o "outDir/${outfilename}"
         done
     >>>
 
     output {
-        Array[File] phased_indices = glob('*_het_eagle2phased.vcf.gz.tbi')
+        Array[File] phased_indices = glob('outDir/*_het_eagle2phased.vcf.gz.tbi')
     }
 
     runtime{
@@ -612,19 +611,21 @@ task query {
         String bcftools_dockerImage = "ghcr.io/break-through-cancer/bcftools-with-stat:latest"
         
     }
+    String outDir = "outDir"
 
     command <<<
         set -e
+        mkdir -p ~{outDir}
         samples=`bcftools query -l ~{chr1_het}`
         for path in ~{sep=' ' all_het}
         do
            hetinfofile=`basename "${path}" "_het.vcf.gz"`"_HetInfo.txt"
            chr=`basename "${path}" "_het.vcf.gz" | awk '{ gsub("^.*\chr","") ; print $0 }'`
            echo "We are on chr${chr} for het querying"
-           bcftools query -f '%CHROM\t%POS\t%REF\t%ALT{0}\t%INFO/DP\n' "${path}" > "${hetinfofile}"
+           bcftools query -f '%CHROM\t%POS\t%REF\t%ALT{0}\t%INFO/DP\n' "${path}" > "~{outDir}/${hetinfofile}"
            for sample in ${samples}
            do
-              bcftools query -s ${sample} -f '[%AD{0}\t%AD{1}\n]' "${path}" > ${sample}.AD.chr${chr}.txt
+              bcftools query -s ${sample} -f '[%AD{0}\t%AD{1}\n]' "${path}" > ~{outDir}/${sample}.AD.chr${chr}.txt
             done
         done
         for phased in ~{sep=' ' all_eaglephased}
@@ -633,15 +634,15 @@ task query {
            echo "We are on chr${chr} for phased querying"
            for sample in ${samples}
            do
-              bcftools query -s ${sample} -f '[%GT\n]' "${phased}" > ${sample}.phasedGT.chr${chr}.1.txt
+              bcftools query -s ${sample} -f '[%GT\n]' "${phased}" > ~{outDir}/${sample}.phasedGT.chr${chr}.1.txt
            done
        done
     >>>
 
     output {
-        Array[File] variant_info = glob('*_HetInfo.txt')
-        Array[File] allelic_depths = glob('*.AD.chr*')
-        Array[File] phased_hets = glob("*.phasedGT.chr*")
+        Array[File] variant_info = glob('~{outDir}/*_HetInfo.txt')
+        Array[File] allelic_depths = glob('~{outDir}/*.AD.chr*')
+        Array[File] phased_hets = glob("~{outDir}/*.phasedGT.chr*")
     }
 
     runtime{
