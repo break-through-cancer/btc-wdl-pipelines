@@ -16,12 +16,16 @@ workflow HapCNA {
       input_vcfindex = filtered_outputVcfIndex
   }
 
+  call hetvarFilter {
+    input:
+        chr_int = iter_isec.chr_int,
+        chr_int_indices = iter_isec.chr_int_indices,
+        participant_id = participant_id
+  }
+
   output{
     # String message = iter_isec.message
-    File final_rem = iter_isec.final_rem
-    File final_remindex = iter_isec.final_remindex
-    # Array[File] chr_int = iter_isec.chr_int
-    # Array[File] chr_int_indices = iter_isec.chr_int_indices
+    Array[File] final_rem = hetvarFilter.het_filteredandIndex
   }
 
   meta {
@@ -47,7 +51,7 @@ task iter_isec { #pending -O z working for wach file in the directory
   command <<<
     set -e
     
-    mkdir -p outDir
+    mkdir -p ~{outDir}
 
     tar -xf ~{refDir}
     for i in {1..2} X
@@ -77,7 +81,56 @@ task iter_isec { #pending -O z working for wach file in the directory
   output {
     File final_rem = "~{participant_id}_isec.vcf.gz"
     File final_remindex = "~{participant_id}_isec.vcf.gz.tbi"
-    Array[File] chr_int = glob("outDir/*_var.vcf.gz")
-    Array[File] chr_int_indices = glob("outDir/*_var.vcf.gz.tbi")
+    Array[File] chr_int = glob("~{outDir}/*_var.vcf.gz")
+    Array[File] chr_int_indices = glob("~{outDir}/*_var.vcf.gz.tbi")
   }
+}
+
+task hetvarFilter { #this task also assumes that the first sample is germline;take out the refDir extraction
+    input {
+        Array[File] chr_int
+        Array[File] chr_int_indices
+        String? include
+        String? exclude
+        String? softFilter
+        String participant_id
+        #File refDir
+
+        String memory = "256MiB"
+        Int timeMinutes = 1 + ceil(size(chr_int, "G"))
+        String bcftools_dockerImage = "quay.io/biocontainers/bcftools:1.10.2--h4f4756c_2"
+    }
+
+    #String outname = basename(...)
+    String outDir = participant_id + "_tmp"
+
+    command <<<
+        set -e
+        for chr in ~{sep=' ' chr_int}
+        do
+            echo "We are on iteration: ${chr}"
+            filename=`basename "${chr}" "_var.vcf.gz"`"_het.vcf.gz"
+            bcftools \
+            filter \
+            -i 'GT[1]="het" & FORMAT/AD[1:0]>=5 & FORMAT/AD[1:1]>=5' \
+            ~{"-e" + exclude} \
+            ~{"-s" + softFilter} \
+            "${chr}" \
+            -O z \
+            -o "~{outDir}/${filename}"
+            bcftools index --tbi "~{outDir}/${filename}"
+        done
+    >>>
+
+    output {
+        Array[File] het_filteredandIndex = glob('~{outDir}/*_het.vcf.g*')
+        Array[File] het_filteredonly = glob('~{outDir}/*_het.vcf.gz')
+        Array[File] het_filteredIndex = glob('~{outDir}/*_het.vcf.gz.tbi')
+    }
+
+    runtime {
+        memory: memory
+        time_minutes: timeMinutes
+        docker: bcftools_dockerImage
+    }
 }
