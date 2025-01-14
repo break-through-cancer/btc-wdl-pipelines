@@ -6,6 +6,7 @@
   "read_from_cache": true,
   "write_to_cache": true,
 
+  "HapCNA.opt_plts": true,
   "HapCNA.sample_num_threshold": "2",
   "HapCNA.ac_rscript": "s3://btc-refdata/iconicc/reference-genome-AC_calc_20231228.R",
   "HapCNA.axiomPoly_resource_vcf": "s3://broad-references/hg38/v0/Axiom_Exome_Plus.genotypes.all_populations.poly.hg38.vcf.gz",
