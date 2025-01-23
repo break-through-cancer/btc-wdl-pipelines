@@ -5,8 +5,9 @@ import json
 from cirro.helpers.preprocess_dataset import PreprocessDataset
 from cirro.api.models.s3_path import S3Path
 
+WORKFLOW_PREFIX = "HapCNA"
 
-def setup_options_inputs(ds: PreprocessDataset):
+def setup_options(ds: PreprocessDataset):
 
     # Set up the scriptBucketName, which is needed by the workflow
     # to stage analysis scripts
@@ -18,82 +19,95 @@ def setup_options_inputs(ds: PreprocessDataset):
     # Isolate the options arguments for the workflow
     # Define a new dictionary which contains all of the items
     # from `ds.params` which do not start with the workflow
-    # prefix "HapCNA"
+    # prefix
     options = {
         kw: val
         for kw, val in ds.params.items()
-        if not kw.startswith(("HapCNA", "CheckSamplesUnique"))
+        if not kw.startswith(WORKFLOW_PREFIX)
     }
-
-    inputs_1 = {
-        kw: val
-        for kw, val in ds.params.items()
-        if kw.startswith("HapCNA")
-    }
-
-    # inputs = {
-    #     kw: val
-    #     for kw, val in ds.params.items()
-    #     if kw.startswith("CheckSamplesUnique")
-    # }
 
     # Write out to the options.json file
     write_json("options.json", options)
-    # write_json("inputs.json", inputs)
-    write_json("inputs.1.json", inputs_1)
-
 
 def yield_single_inputs(ds: PreprocessDataset) -> dict:
     """
-    This function is used to identify each of the BAM/BAI pairs
-    which have been provided as part of the input dataset by the user.
-    The output of this function will be the a yielded series of
-    struct objects with the `input_bam` and `input_bam_index` attributes.
+    This function processes the samplesheet and identifies each of the BAM/BAI pairs
+    for tumor and normal samples, and assigns the corresponding files to the appropriate
+    fields based on the input dataset.
     """
+    
+    for patient, group in ds.samplesheet.groupby("patient"):
+        # Separate normal and tumor samples
+        normal_samples = group[group["status"] == 0]
+        tumor_samples = group[group["status"] == 1]
 
-    # The ds.files object is a DataFrame with columns for `sample` and `file`
-    # For example:
-    # | sample  | file            |
-    # |---------|-----------------|
-    # | sampleA | sampleA.bam     |
-    # | sampleA | sampleA.bam.bai |
-    # | sampleB | sampleB.bam     |
-    # | sampleB | sampleB.bam.bai |
-
-    # Iterate over each batch of files with a distinct sample
-    for sample, files in ds.files.groupby("sample"):
-
-        # Set up an empty struct
-        dat = dict(input_bam=None, input_bam_index=None)
-
-        # Iterate over each file
-        for file in files['file'].values:
-            for suffix, kw in [(".bam", "input_bam"), (".bai", "input_bam_index")]:
-                if file.endswith(suffix):
-                    if dat[kw] is not None:
-                        raise ValueError(f"Multiple '{suffix}' files found for sample {sample}")
-                    dat[kw] = file
-
-        ds.logger.info(f"Sample: {sample}")
-        if dat["input_bam"] is None:
-            ds.logger.info("No BAM file found, skipping")
-            continue
-        if dat["input_bam_index"] is None:
-            ds.logger.info("No BAM Index file found, skipping")
+        # Skip patients with no normal or no tumor samples
+        if normal_samples.empty or tumor_samples.empty:
+            print(f"Patient {patient} has insufficient samples (Normal: {len(normal_samples)}, Tumor: {len(tumor_samples)}); skipping.")
             continue
 
-        ds.logger.info(f"BAM: {dat['input_bam']}")
-        ds.logger.info(f"BAM Index: {dat['input_bam_index']}")
+        # Process each normal sample
+        for _, normal_sample in normal_samples.iterrows():
+            normal_sample_id = normal_sample["sample"]
+            normal_sex = normal_sample["sex"]
 
-        # Add the workflow prefix
-        yield {
-            f"HapCNA.{kw}": val
-            for kw, val in dat.items()
-        }
+            # Find the corresponding BAM/BAI files for the normal sample
+            normal_files = ds.files[ds.files["sample"] == normal_sample_id]
+            normal_dat = {
+                "normal_sample_id": normal_sample_id,
+                "normal_input_bam": None,
+                "normal_input_bam_index": None,
+                "normal_sex": normal_sex,
+            }
+            for file in normal_files["file"].values:
+                for suffix, key in [(".bam", "normal_input_bam"), (".bai", "normal_input_bam_index")]:
+                    if file.endswith(suffix):
+                        if normal_dat[key] is not None:
+                            raise ValueError(f"Multiple '{suffix}' files found for normal sample {normal_sample_id}")
+                        normal_dat[key] = file
 
+            # Ensure both BAM and BAM index are found for the normal sample
+            if normal_dat["normal_input_bam"] is None or normal_dat["normal_input_bam_index"] is None:
+                print(f"Normal sample {normal_sample_id} is missing BAM or BAM index files; skipping.")
+                continue
+
+            # Process each tumor sample for the patient
+            for _, tumor_sample in tumor_samples.iterrows():
+                tumor_sample_id = tumor_sample["sample"]
+
+                # Find the corresponding BAM/BAI files for the tumor sample
+                tumor_files = ds.files[ds.files["sample"] == tumor_sample_id]
+                tumor_dat = {
+                    "tumor_sample_id": tumor_sample_id,
+                    "tumor_input_bam": None,
+                    "tumor_input_bam_index": None,
+                }
+                for file in tumor_files["file"].values:
+                    for suffix, key in [(".bam", "tumor_input_bam"), (".bai", "tumor_input_bam_index")]:
+                        if file.endswith(suffix):
+                            if tumor_dat[key] is not None:
+                                raise ValueError(f"Multiple '{suffix}' files found for tumor sample {tumor_sample_id}")
+                            tumor_dat[key] = file
+
+                # Ensure both BAM and BAM index are found for the tumor sample
+                if tumor_dat["tumor_input_bam"] is None or tumor_dat["tumor_input_bam_index"] is None:
+                    print(f"Tumor sample {tumor_sample_id} is missing BAM or BAM index files; skipping.")
+                    continue
+
+                # Create the participant_id
+                participant_id = f"{normal_sample_id}_{tumor_sample_id}"
+
+                # Yield the data as a dictionary with workflow_prefix
+                yield {
+                    f"{WORKFLOW_PREFIX}.{key}": value
+                    for key, value in {
+                        "participant_id": participant_id,
+                        **normal_dat,
+                        **tumor_dat,
+                    }.items()
+                }
 
 def setup_inputs(ds: PreprocessDataset):
-
     # Make a combined set of inputs with each of the BAM files
     all_inputs = [
         {
@@ -101,7 +115,7 @@ def setup_inputs(ds: PreprocessDataset):
             **{
                 kw: val
                 for kw, val in ds.params.items()
-                if kw.startswith("HapCNA")
+                if kw.startswith(WORKFLOW_PREFIX)
             }
         }
         for single_input in yield_single_inputs(ds)
@@ -130,9 +144,9 @@ def main():
     # Get information on the analysis launched by the user
     ds = PreprocessDataset.from_running()
     # Set up the options.json file
-    setup_options_inputs(ds)
+    setup_options(ds)
     # Set up the inputs files
-    # setup_inputs(ds)
+    setup_inputs(ds)
 
 
 if __name__ == "__main__":
