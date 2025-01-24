@@ -29,6 +29,22 @@ def setup_options(ds: PreprocessDataset):
     # Write out to the options.json file
     write_json("options.json", options)
 
+def setup_inputs_single(ds: PreprocessDataset):
+
+    # Isolate the options arguments for the workflow
+    # Define a new dictionary which contains all of the items
+    # from `ds.params` which do not start with the workflow
+    # prefix "HapCNA"
+
+    inputs = {
+        kw: val
+        for kw, val in ds.params.items()
+        if kw.startswith("HapCNA")
+    }
+
+    # Write out to the options.json file
+    write_json("inputs.1.json", inputs)
+
 def yield_single_inputs(ds: PreprocessDataset) -> dict:
     """
     This function processes the samplesheet and identifies each of the BAM/BAI pairs
@@ -152,8 +168,14 @@ def main():
     ds = PreprocessDataset.from_running()
     # Set up the options.json file
     setup_options(ds)
+
     # Set up the inputs files
-    setup_inputs(ds)
+    if ds.params.get("input_type") == "single":
+        setup_inputs_single(ds)
+    else:
+        setup_inputs(ds)
+        
+    ds.remove_param("input_type")
 
 
 if __name__ == "__main__":
