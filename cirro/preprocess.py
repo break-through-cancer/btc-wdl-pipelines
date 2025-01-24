@@ -57,8 +57,8 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
                 "normal_sample_id": normal_sample_id,
                 "normal_input_bam": None,
                 "normal_input_bam_index": None,
-                "normal_sex": normal_sex,
             }
+
             for file in normal_files["file"].values:
                 for suffix, key in [(".bam", "normal_input_bam"), (".bai", "normal_input_bam_index")]:
                     if file.endswith(suffix):
@@ -74,6 +74,7 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
             # Process each tumor sample for the patient
             for _, tumor_sample in tumor_samples.iterrows():
                 tumor_sample_id = tumor_sample["sample"]
+                tumor_sex = tumor_sample["sex"]
 
                 # Find the corresponding BAM/BAI files for the tumor sample
                 tumor_files = ds.files[ds.files["sample"] == tumor_sample_id]
@@ -91,7 +92,12 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
 
                 # Ensure both BAM and BAM index are found for the tumor sample
                 if tumor_dat["tumor_input_bam"] is None or tumor_dat["tumor_input_bam_index"] is None:
-                    print(f"Tumor sample {tumor_sample_id} is missing BAM or BAM index files; skipping.")
+                    ds.logger.info(f"Tumor sample {tumor_sample_id} is missing BAM or BAM index files; skipping.")
+                    continue
+
+                # Validate that the sex matches between the normal and tumor samples
+                if normal_sex != tumor_sex:
+                    ds.logger.info(f"Sex mismatch for patient {patient}: Normal ({normal_sex}) vs Tumor ({tumor_sex}); skipping.")
                     continue
 
                 # Create the participant_id
@@ -102,6 +108,7 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
                     f"{WORKFLOW_PREFIX}.{key}": value
                     for key, value in {
                         "participant_id": participant_id,
+                        "sample_sex": normal_sex,
                         **normal_dat,
                         **tumor_dat,
                     }.items()
