@@ -43,7 +43,7 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
 
         # Skip patients with no normal or no tumor samples
         if normal_samples.empty or tumor_samples.empty:
-            print(f"Patient {patient} has insufficient samples (Normal: {len(normal_samples)}, Tumor: {len(tumor_samples)}); skipping.")
+            ds.logger.info(f"Patient {patient} has insufficient samples (Normal: {len(normal_samples)}, Tumor: {len(tumor_samples)}); skipping.")
             continue
 
         # Process each normal sample
@@ -68,7 +68,7 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
 
             # Ensure both BAM and BAM index are found for the normal sample
             if normal_dat["normal_input_bam"] is None or normal_dat["normal_input_bam_index"] is None:
-                print(f"Normal sample {normal_sample_id} is missing BAM or BAM index files; skipping.")
+                ds.logger.info(f"Normal sample {normal_sample_id} is missing BAM or BAM index files; skipping.")
                 continue
 
             # Process each tumor sample for the patient
