@@ -10,8 +10,64 @@
           "multiple",
           "single"
         ],
-        "default": "single",
-        "description": "Select `single` to manually select a normal/tumor input pair; `multiple` will pair all normal and tumor samples for a given patient."
+        "default": "multiple",
+        "description": "Select `single` to manually select and complete values for one normal/tumor input pair. Select `multiple` to automatically pair all normal and tumor samples and fill in values for a given patient."
+      },
+      "participant_id": {
+        "type": "string",
+        "title": "participant_id",
+        "description": "Identifier for the sample.",
+        "default": ""
+      },
+      "tumor_sample_id": {
+        "type": "string",
+        "title": "tumor_sample_id",
+        "description": "",
+        "default": ""
+      },
+      "normal_sample_id": {
+        "type": "string",
+        "title": "normal_sample_id",
+        "description": "",
+        "default": ""
+      },
+      "tumor_input_bam": {
+        "type": "string",
+        "title": "tumor_input_bam",
+        "description": "",
+        "pathType": "dataset",
+        "file": "**/*.bam"
+      },
+      "tumor_input_bam_index": {
+        "type": "string",
+        "title": "tumor_input_bam_index",
+        "description": "",
+        "pathType": "dataset",
+        "file": "**/*.bam.bai"
+      },
+      "normal_input_bam": {
+        "type": "string",
+        "title": "normal_input_bam",
+        "description": "",
+        "pathType": "dataset",
+        "file": "**/*.bam"
+      },
+      "normal_input_bam_index": {
+        "type": "string",
+        "title": "normal_input_bam_index",
+        "description": "",
+        "pathType": "dataset",
+        "file": "**/*.bam.bai"
+      },
+      "sample_sex": {
+        "type": "string",
+        "title": "",
+        "enum": [
+          "",
+          "male",
+          "female"
+        ],
+        "default": ""
       }
     },
     "dependencies": {
@@ -21,69 +77,21 @@
             "properties": {
               "input_type": {
                 "const": "multiple"
-              }
+              },
+              "participant_id": { "readOnly": true },
+              "tumor_sample_id": { "readOnly": true },
+              "normal_sample_id": { "readOnly": true },
+              "tumor_input_bam": { "readOnly": true },
+              "tumor_input_bam_index": { "readOnly": true },
+              "normal_input_bam": { "readOnly": true },
+              "normal_input_bam_index": { "readOnly": true },
+              "sample_sex": { "readOnly": true }
             }
           },
           {
             "properties": {
               "input_type": {
                 "const": "single"
-              },
-              "participant_id": {
-                "type": "string",
-                "title": "participant_id",
-                "description": "Identifier for the sample.",
-                "default": ""
-              },
-              "tumor_sample_id": {
-                "type": "string",
-                "title": "tumor_sample_id",
-                "description": "",
-                "default": ""
-              },
-              "normal_sample_id": {
-                "type": "string",
-                "title": "normal_sample_id",
-                "description": "",
-                "default": ""
-              },
-              "tumor_input_bam": {
-                "type": "string",
-                "title": "tumor_input_bam",
-                "description": "",
-                "pathType": "dataset",
-                "file": "**/*.bam"
-              },
-              "tumor_input_bam_index": {
-                "type": "string",
-                "title": "tumor_input_bam_index",
-                "description": "",
-                "pathType": "dataset",
-                "file": "**/*.bam.bai"
-              },
-              "normal_input_bam": {
-                "type": "string",
-                "title": "normal_input_bam",
-                "description": "",
-                "pathType": "dataset",
-                "file": "**/*.bam"
-              },
-              "normal_input_bam_index": {
-                "type": "string",
-                "title": "normal_input_bam_index",
-                "description": "",
-                "pathType": "dataset",
-                "file": "**/*.bam.bai"
-              },
-              "sample_sex": {
-                "type": "string",
-                "title": "",
-                "enum": [
-                  "",
-                  "male",
-                  "female"
-                ],
-                "default": ""
               }
             },
             "required": [
