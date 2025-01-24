@@ -170,12 +170,13 @@ def main():
     setup_options(ds)
 
     # Set up the inputs files
-    if ds.params.get("input_type") == "single":
+    input_type = ds.params.get("input_type")
+    ds.remove_param("input_type")
+
+    if input_type == "single":
         setup_inputs_single(ds)
     else:
         setup_inputs(ds)
-        
-    ds.remove_param("input_type")
 
 
 if __name__ == "__main__":
