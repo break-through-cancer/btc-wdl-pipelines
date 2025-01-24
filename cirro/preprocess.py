@@ -116,6 +116,13 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
                     ds.logger.info(f"Sex mismatch for patient {patient}: Normal ({normal_sex}) vs Tumor ({tumor_sex}); skipping.")
                     continue
 
+                if normal_sex.strip().upper() in ['F', 'XX']:
+                    sample_sex = 'female'
+                elif normal_sex.strip().upper() in ['M', 'XY']:
+                    sample_sex = 'male'
+                else:
+                    raise ValueError(f"sample_sex value '{normal_sex}' for patient {patient} is invalid.")
+
                 # Create the participant_id
                 participant_id = f"{normal_sample_id}_{tumor_sample_id}"
 
@@ -124,7 +131,7 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
                     f"{WORKFLOW_PREFIX}.{key}": value
                     for key, value in {
                         "participant_id": participant_id,
-                        "sample_sex": normal_sex,
+                        "sample_sex": sample_sex,
                         **normal_dat,
                         **tumor_dat,
                     }.items()
@@ -186,6 +193,7 @@ def main():
             "HapCNA.tumor_sample_id",
             "HapCNA.sample_sex"
         ]
+        
         for param in form_params:
             ds.remove_param(param, force=True)
 
