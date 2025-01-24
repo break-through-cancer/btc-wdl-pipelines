@@ -176,6 +176,19 @@ def main():
     if input_type == "single":
         setup_inputs_single(ds)
     else:
+        form_params = [
+            "HapCNA.participant_id",
+            "HapCNA.normal_input_bam",
+            "HapCNA.normal_input_bam_index",
+            "HapCNA.normal_sample_id",
+            "HapCNA.tumor_input_bam",
+            "HapCNA.tumor_input_bam_index",
+            "HapCNA.tumor_sample_id",
+            "HapCNA.sample_sex"
+        ]
+        for param in form_params:
+            ds.remove_param(param, force=True)
+
         setup_inputs(ds)
 
 
