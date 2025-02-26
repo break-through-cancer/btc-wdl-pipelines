@@ -5,6 +5,10 @@
   "use_relative_output_paths": true,
   "read_from_cache": true,
   "write_to_cache": true,
+  "default_runtime_attributes": {
+    "memory": "16 GB",
+    "cpu": 4
+  },
 
   "HapCNA.participant_id": "$.params.dataset.paramJson.participant_id",
   "HapCNA.ref_dir1000G": "$.params.dataset.paramJson.ref_dir1000G",
