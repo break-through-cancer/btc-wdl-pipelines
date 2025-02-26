@@ -124,7 +124,8 @@ task ImportGVCFs {
   >>>
 
   runtime {
-    memory: "26000 MiB"
+    memory: "32 GB"
+    # memory: "26000 MiB"
     cpu: 4
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
@@ -184,8 +185,9 @@ task GenotypeGVCFs {
   >>>
 
   runtime {
-    memory: "26000 MiB"
-    cpu: 2
+    memory: "32 GB"
+    # memory: "26000 MiB"
+    # cpu: 2
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -289,8 +291,10 @@ task HardFilterAndMakeSitesOnlyVcf {
   >>>
 
   runtime {
-    memory: "3750 MiB"
-    cpu: "1"
+    cpu: 2
+    memory: "4 GB"
+    # memory: "3750 MiB"
+    # cpu: "1"
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -350,8 +354,9 @@ task IndelsVariantRecalibrator {
   >>>
 
   runtime {
-    memory: "26000 MiB"
-    cpu: "2"
+    memory: "32 GB"
+    # memory: "26000 MiB"
+    # cpu: "2"
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -417,8 +422,9 @@ task SNPsVariantRecalibratorCreateModel {
   >>>
 
   runtime {
-    memory: "104 GiB"
-    cpu: "2"
+    memory: "128 GB"
+    # memory: "104 GiB"
+    # cpu: "2"
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -497,8 +503,9 @@ task SNPsVariantRecalibrator {
   >>>
 
   runtime {
-    memory: "~{machine_mem} MiB"
-    cpu: 2
+    memory: "128 GB"
+    # memory: "~{machine_mem} MiB"
+    # cpu: 2
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -563,8 +570,8 @@ task GatherTranches {
   >>>
 
   runtime {
-    memory: "7500 MiB"
-    cpu: "2"
+    # memory: "7500 MiB"
+    # cpu: "2"
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -622,8 +629,10 @@ task ApplyRecalibration {
   >>>
 
   runtime {
-    memory: "7000 MiB"
-    cpu: "1"
+    cpu: 2
+    memory: "8 GB"
+    # memory: "7000 MiB"
+    # cpu: "1"
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -668,8 +677,10 @@ task GatherVcfs {
   >>>
 
   runtime {
-    memory: "7000 MiB"
-    cpu: "1"
+    cpu: 2
+    memory: "8 GB"
+    # memory: "7000 MiB"
+    # cpu: "1"
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -716,8 +727,10 @@ task SelectFingerprintSiteVariants {
   >>>
 
   runtime {
-    memory: "7500 MiB"
-    cpu: 1
+    cpu: 2
+    memory: "8 GB"
+    # memory: "7500 MiB"
+    # cpu: 1
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -763,8 +776,10 @@ task CollectVariantCallingMetrics {
   }
 
   runtime {
-    memory: "7500 MiB"
-    cpu: 2
+    cpu: 4
+    memory: "8 GB"
+    # memory: "7500 MiB"
+    # cpu: 2
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -836,8 +851,10 @@ task GatherVariantCallingMetrics {
   >>>
 
   runtime {
-    memory: "3000 MiB"
-    cpu: "1"
+    cpu: 2
+    memory: "4 GB"
+    # memory: "3000 MiB"
+    # cpu: "1"
     bootDiskSizeGb: 15
     disks: "local-disk " + disk_size + " HDD"
     preemptible: 1
@@ -929,6 +946,7 @@ task CrossCheckFingerprint {
   >>>
 
   runtime {
+    cpu: cpu
     memory: memMb + " MiB"
     disks: "local-disk " + disk + " HDD"
     preemptible: 0
@@ -966,8 +984,10 @@ task GatherPicardMetrics {
   }
 
   runtime {
-    cpu: 1
-    memory: "3.75 GiB"
+    cpu: 2
+    memory: "4 GB"
+    # cpu: 1
+    # memory: "3.75 GiB"
     preemptible: 1
     disks: "local-disk " + disk_size + " HDD"
     docker: "us.gcr.io/broad-gotc-prod/python:2.7"
@@ -1045,7 +1065,9 @@ task GetFingerprintingIntervalIndices {
 
   runtime {
     cpu: 2
-    memory: "3750 MiB"
+    memory: "4 GB"
+    # cpu: 2
+    # memory: "3750 MiB"
     preemptible: 1
     bootDiskSizeGb: 15
     disks: "local-disk 10 HDD"
@@ -1074,7 +1096,9 @@ task PartitionSampleNameMap {
   }
 
   runtime {
-    memory: "1 GiB"
+    cpu: 2
+    memory: "4 GB"
+    # memory: "1 GiB"
     preemptible: 1
     disks: "local-disk 10 HDD"
     docker: "us.gcr.io/broad-gotc-prod/python:2.7"

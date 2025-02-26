@@ -122,7 +122,7 @@ task HaplotypeCaller {
   }
   runtime {
     docker: docker
-    memory: machine_mem_gb + " GB"
+    # memory: machine_mem_gb + " GB"
     disks: "local-disk " + select_first([disk_space_gb, disk_size]) + if use_ssd then " SSD" else " HDD"
     preemptible: select_first([preemptible_attempts, 3])
   }
@@ -164,7 +164,7 @@ task MergeVCFs {
   }
   runtime {
     docker: docker
-    memory: machine_mem_gb + " GB"
+    # memory: machine_mem_gb + " GB"
     disks: "local-disk " + select_first([disk_space_gb, 100]) + if use_ssd then " SSD" else " HDD"
     preemptible: select_first([preemptible_attempts, 3])
   }
@@ -219,9 +219,9 @@ task PreprocessIntervals {
 
     runtime {
         docker: gatk_docker
-        memory: machine_mem_mb + " MB"
+        # memory: machine_mem_mb + " MB"
         disks: "local-disk " + select_first([disk_space_gb, 40]) + if use_ssd then " SSD" else " HDD"
-        cpu: select_first([cpu, 1])
+        # cpu: select_first([cpu, 1])
         preemptible: select_first([preemptible_attempts, 5])
     }
 
@@ -297,7 +297,7 @@ task CollectReadCounts {
   }
   runtime {
     docker: docker
-    memory: machine_mem_gb + " GB"
+    # memory: machine_mem_gb + " GB"
     disks: "local-disk " + select_first([disk_space_gb, disk_size]) + if use_ssd then " SSD" else " HDD"
     preemptible: select_first([preemptible_attempts, 3])
   }
@@ -350,7 +350,7 @@ task GenerateSampleMapFile {
 
     runtime {
         docker: docker
-        memory: machine_mem_gb + " GB"
+        # memory: machine_mem_gb + " GB"
         disks: "local-disk " + disk_space_gb + " HDD"
         preemptible: 3
     }
@@ -395,7 +395,9 @@ task Filter {
     }
 
     runtime {
-        memory: memory
+        cpu: 2
+        memory: "4 GB"
+        # memory: memory
         time_minutes: timeMinutes
         docker: bcftools_dockerImage
     }
@@ -450,7 +452,9 @@ task iter_isec { #pending -O z working for wach file in the directory
   >>>
 
   runtime {
-    memory: memory
+    cpu: 2
+    memory: "4 GB"
+    # memory: memory
     time_minutes: timeMinutes
     docker: bcftools_dockerImage
     disks: "local-disk 2000 HDD"
@@ -509,7 +513,9 @@ task hetvarFilter { #this task also assumes that the first sample is germline;ta
     }
 
     runtime {
-        memory: memory
+        cpu: 2
+        memory: "4 GB"
+        # memory: memory
         time_minutes: timeMinutes
         docker: bcftools_dockerImage
     }
@@ -529,6 +535,7 @@ task eagle_phasing{
         String dir_name = "hg38/1000G"
         String outDir = "outDir"
 
+        Int cpus = 16
 
     command <<<
         set -e
@@ -549,7 +556,8 @@ task eagle_phasing{
               --geneticMapFile=~{eagle_gm} \
               --chrom=chr${chr} \
               --outPrefix="~{outDir}/${filename}" \
-              --numThreads=12
+              --numThreads={cpus}
+              # --numThreads=12
             fi
         done
     >>>
@@ -559,7 +567,10 @@ task eagle_phasing{
     }
 
     runtime{
-        memory: memory
+        cpu: cpus
+        memory: "128 GB"
+      
+        # memory: memory
         time_minutes: timeMinutes
         docker: eagle_dockerimage
         disks: "local-disk 2000 HDD"
@@ -591,7 +602,9 @@ task index {
     }
 
     runtime{
-        memory: memory
+        cpu: 2
+        memory: "4 GB"
+        # memory: memory
         time_minutes: timeMinutes
         docker: bcftools_dockerImage
     }
@@ -646,7 +659,7 @@ task query {
     }
 
     runtime{
-        memory:memory
+        # memory:memory
         time_minutes:timeMinutes
         docker:bcftools_dockerImage
     }
@@ -683,7 +696,7 @@ task ac_calc_agg {
     }
 
     runtime{
-        memory:memory
+        # memory:memory
         time_minutes:timeMinutes
         docker:r_dockerImage
     }
@@ -720,7 +733,7 @@ task ac_calc_noagg {
     }
 
     runtime{
-        memory:memory
+        # memory:memory
         time_minutes:timeMinutes
         docker:r_dockerImage
     }
@@ -756,7 +769,7 @@ task tangent_XY {
     }
 
     runtime{
-        memory:memory
+        # memory:memory
         time_minutes:timeMinutes
         docker:r_dockerImage
     }
@@ -803,7 +816,7 @@ task segment {
     }
 
     runtime{
-        memory:memory
+        # memory:memory
         time_minutes:timeMinutes
         docker:r_dockerImage
     }
