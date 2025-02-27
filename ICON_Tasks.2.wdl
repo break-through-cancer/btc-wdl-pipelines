@@ -556,7 +556,7 @@ task eagle_phasing{
               --geneticMapFile=~{eagle_gm} \
               --chrom=chr${chr} \
               --outPrefix="~{outDir}/${filename}" \
-              --numThreads={cpus}
+              --numThreads=~{cpus}
               # --numThreads=12
             fi
         done
