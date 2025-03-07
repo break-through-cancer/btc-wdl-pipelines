@@ -1,0 +1,15 @@
+{
+  "form": {
+    "properties": {
+      "optional": {
+        "default": true,
+        "description": "Generate optional output file",
+        "title": "Sample",
+        "type": "boolean",
+        "value": true
+      }
+    }
+  },
+  "ui": {
+  }
+}

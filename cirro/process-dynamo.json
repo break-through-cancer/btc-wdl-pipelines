@@ -1,0 +1,15 @@
+{
+  "childProcessIds": [],
+  "code": {
+    "repository": "GITHUBPUBLIC",
+    "script": "test_optional.wdl",
+    "uri": "break-through-cancer/btc-wdl-pipelines",
+    "version": "test"
+  },
+  "desc": "testing optional Pipeline",
+  "documentationUrl": "",
+  "executor": "CROMWELL",
+  "id": "optionaltest",
+  "name": "optional output test",
+  "parentProcessIds": []
+}
