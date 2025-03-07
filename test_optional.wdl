@@ -16,6 +16,10 @@ task generate_files {
     File default_output = "default.txt"
     File? optional_output = "optional.txt"
   }
+  
+  runtime {
+    docker: "ubuntu:20.04"
+  }
 }
 
 workflow simple_pipeline {
