@@ -4,7 +4,7 @@
     "repository": "GITHUBPUBLIC",
     "script": "ICONICC_paired.3.wdl",
     "uri": "wchukwu/btc-wdl-pipelines",
-    "version": "main"
+    "version": "iconicc"
   },
   "desc": "ICONICC Pipeline",
   "documentationUrl": "",
