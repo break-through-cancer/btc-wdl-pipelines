@@ -101,7 +101,7 @@ workflow HapCNA {
     File tangent_rscript
     File pon
     File ref_clinical
-    File? cohort_clinical
+    File cohort_clinical
     String? scale_method = "median"
     String sample_sex
     Boolean? fix_outliers = false
