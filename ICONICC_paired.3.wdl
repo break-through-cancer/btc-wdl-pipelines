@@ -1,13 +1,13 @@
 ### Author: Wolu Chukwu, wchukwu@broadinstitute.org, Shahab Sarmashghi, ssarmash@broadinstitute.org
-### Date last updated: June 24, 2024
+### Date last updated: April 30, 2025
 ### License: GNU GPL2, Copyright (C) 2024 Dana-Farber Cancer Institute
 
 version 1.0
 
 ## Pipeline for Tumor-Normal analyses
 
-import "https://raw.githubusercontent.com/break-through-cancer/btc-wdl-pipelines/refs/heads/iconicc/JointGeno_Tasks.1.wdl" as JGTasks
-import "https://raw.githubusercontent.com/break-through-cancer/btc-wdl-pipelines/refs/heads/iconicc/ICON_Tasks.2.wdl" as ICTasks
+import "https://raw.githubusercontent.com/wchukwu/btc-wdl-pipelines/refs/heads/iconicc/JointGeno_Tasks.1.wdl" as JGTasks
+import "https://raw.githubusercontent.com/wchukwu/btc-wdl-pipelines/refs/heads/iconicc/ICON_Tasks.2.wdl" as ICTasks
 
 # WORKFLOW DEFINITION 
 workflow HapCNA {
@@ -100,15 +100,16 @@ workflow HapCNA {
     #ADDITIONAL INPUTS FOR TANGENT
     File tangent_rscript
     File pon
-    File filt_probes
     File ref_clinical
     File? cohort_clinical
     String? scale_method = "median"
     String sample_sex
+    Boolean? fix_outliers = false
+    Int? trailingN = 5
+    Int? n_dim = 10
 
     #ADDITIONAL INPUTS FOR SEGMENTATION
     File segment_rscript
-    Boolean? opt_plts = false
     Int? smooth_region = 10 
     Int? outlier_SD = 4
     Int? smooth_SD = 2
@@ -117,6 +118,9 @@ workflow HapCNA {
     String? undo_split = "none"
     Float? undo_prune = 0.05
     Int? undo_SD = 2
+    Int? recovery_thresh = 20
+    Boolean? use_het = true
+    Float? miss_thresh = 1.0
   
   }  
 
@@ -740,13 +744,14 @@ workflow HapCNA {
           tangent_rscript = tangent_rscript,
           pon = pon,
           tumor_counts = TumorCount.output_counts,
-          filt_probes = filt_probes,
           ref_clinical = ref_clinical,
           cohort_clinical = cohort_clinical,
           sample_sex = sample_sex,
             
           #optional inputs
-          scale_method = scale_method
+          scale_method = scale_method,
+          fix_outliers = fix_outliers,
+          trailingN = trailingN
     }
 
   call ICTasks.segment {
@@ -755,10 +760,9 @@ workflow HapCNA {
           allelic_counts = select_first([ac_calc_agg.allelic_counts,ac_calc_noagg.allelic_counts]),
           tangent_normalized = tangent_XY.tangent_norm,
           participant_id = participant_id,
-          opt_plts = opt_plts,
           sample_sex = sample_sex,
 
-            #optional inputs
+          #optional inputs
           smooth_region = smooth_region, 
           outlier_SD = outlier_SD,
           smooth_SD = smooth_SD,
@@ -766,7 +770,10 @@ workflow HapCNA {
           min_width = min_width,
           undo_split = undo_split,
           undo_prune = undo_prune,
-          undo_SD = undo_SD
+          undo_SD = undo_SD,
+          recovery_thresh = recovery_thresh,
+          use_het = use_het,
+          miss_thresh = miss_thresh
     }
 
 # Outputs that will be retained when execution is complete
@@ -776,7 +783,6 @@ workflow HapCNA {
     File ac_cts = segment.ac_cts
     File segment_plots = segment.segment_plots
     File segment_cts = segment.segment_cts
-    File? outlier_plots = segment.outlier_plots
 
   }
   meta {

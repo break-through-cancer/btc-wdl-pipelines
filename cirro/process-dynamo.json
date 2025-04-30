@@ -3,7 +3,7 @@
   "code": {
     "repository": "GITHUBPUBLIC",
     "script": "ICONICC_paired.3.wdl",
-    "uri": "break-through-cancer/btc-wdl-pipelines",
+    "uri": "wchukwu/btc-wdl-pipelines",
     "version": "main"
   },
   "desc": "ICONICC Pipeline",

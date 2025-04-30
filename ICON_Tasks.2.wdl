@@ -1,5 +1,5 @@
 ### Author: Wolu Chukwu, wchukwu@broadinstitute.org, Shahab Sarmashghi, ssarmash@broadinstitute.org
-### Date last updated: July 9, 2024
+### Date last updated: April 18, 2025
 ### License: GNU GPL2, Copyright (C) 2024 Dana-Farber Cancer Institute
 
 version 1.0
@@ -741,16 +741,18 @@ task ac_calc_noagg {
 
 task tangent_XY {
     input{
-        File tangent_rscript
+        File tangent_rscript #select it as a separate output from the task where it is created. Don't make it a workflow-level output but specifically for this purpose
         File pon #panel of normals
         File tumor_counts
-        File filt_probes
         File ref_clinical
-        File? cohort_clinical
+        File cohort_clinical
         String sample_sex
-
+       
         #optional inputs
         String? scale_method
+        Boolean? fix_outliers
+        Int? trailingN
+        Int? n_dim
 
         
 
@@ -761,7 +763,7 @@ task tangent_XY {
     }
 
     command <<<
-        Rscript ~{tangent_rscript} --pon ~{pon} --tumor_cts ~{tumor_counts} --prbs ~{filt_probes} --sample_sex ~{sample_sex} --ref_cli ~{ref_clinical} --clin ~{cohort_clinical} --scale-mthd ~{scale_method}
+        Rscript ~{tangent_rscript} --pon ~{pon} --tumor_cts ~{tumor_counts} --ref_cli ~{ref_clinical} --clin ~{cohort_clinical} --scale-mthd ~{scale_method} --fix_outliers ~{fix_outliers} --trailingN ~{trailingN} --sample_sex ~{sample_sex} --n_dim ~{n_dim}
     >>>
 
     output {
@@ -769,7 +771,7 @@ task tangent_XY {
     }
 
     runtime{
-        # memory:memory
+        memory:memory
         time_minutes:timeMinutes
         docker:r_dockerImage
     }
@@ -782,7 +784,6 @@ task segment {
         File tangent_normalized
         String participant_id
         String sample_sex
-        Boolean? opt_plts
 
         #optional arguments for segmentation
         Int? smooth_region 
@@ -794,6 +795,10 @@ task segment {
         Float? undo_prune
         Int? undo_SD
 
+        #arguments for segment recovery
+        Int? recovery_thresh
+        Boolean? use_het
+        Float? miss_thresh
         
 
         String memory = "10 GB"
@@ -803,20 +808,18 @@ task segment {
     }
 
     command <<<
-        Rscript ~{segment_rscript} --al_cts ~{allelic_counts} --tangent_cts ~{tangent_normalized} --sample_sex ~{sample_sex} --participant_id ~{participant_id} --smth_reg ~{smooth_region} --outlier_SD ~{outlier_SD} --smooth_SD ~{smooth_SD} --alpha ~{alpha} --min_width ~{min_width} --undo_split ~{undo_split} --undo_prune ~{undo_prune} --undo_SD ~{undo_SD} --add_plots ~{opt_plts}
+        Rscript ~{segment_rscript} --al_cts ~{allelic_counts} --tangent_cts ~{tangent_normalized} --sample_sex ~{sample_sex} --participant_id ~{participant_id} --smth_reg ~{smooth_region} --outlier_SD ~{outlier_SD} --smooth_SD ~{smooth_SD} --alpha ~{alpha} --min_width ~{min_width} --undo_split ~{undo_split} --undo_prune ~{undo_prune} --undo_SD ~{undo_SD} --recovery_thresh ~{recovery_thresh} --use_hetinfo ~{use_het} --miss_thresh ~{miss_thresh}
     >>>
 
     output {
-        #File CN_plots = "~{participant_id}_CN.Segment.2Dplots.pdf"
         File seg_file = "~{participant_id}.seg.txt"
         File ac_cts = "~{participant_id}_processed_counts.txt"
         File segment_plots = "~{participant_id}_segmentPlots.pdf"
         File segment_cts = "~{participant_id}_segment_cts.txt"
-        File? outlier_plots = "~{participant_id}_outlierPlots.pdf"
     }
 
     runtime{
-        # memory:memory
+        memory:memory
         time_minutes:timeMinutes
         docker:r_dockerImage
     }
