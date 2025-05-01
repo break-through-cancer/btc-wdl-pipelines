@@ -751,7 +751,8 @@ workflow HapCNA {
           #optional inputs
           scale_method = scale_method,
           fix_outliers = fix_outliers,
-          trailingN = trailingN
+          trailingN = trailingN,
+          n_dim = n_dim
     }
 
   call ICTasks.segment {
