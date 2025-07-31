@@ -6,8 +6,8 @@ version 1.0
 
 ## Pipeline for Tumor-Normal analyses
 
-import "https://raw.githubusercontent.com/wchukwu/btc-wdl-pipelines/refs/heads/iconicc/JointGeno_Tasks.1.wdl" as JGTasks
-import "https://raw.githubusercontent.com/wchukwu/btc-wdl-pipelines/refs/heads/iconicc/ICON_Tasks.2.wdl" as ICTasks
+import "https://raw.githubusercontent.com/break-through-cancer/btc-wdl-pipelines/refs/heads/iconicc/JointGeno_Tasks.1.wdl" as JGTasks
+import "https://raw.githubusercontent.com/break-through-cancer/btc-wdl-pipelines/refs/heads/iconicc/ICON_Tasks.2.wdl" as ICTasks
 
 # WORKFLOW DEFINITION 
 workflow HapCNA {
