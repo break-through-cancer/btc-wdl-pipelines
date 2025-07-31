@@ -1,0 +1,10 @@
+{
+    "final_workflow_outputs_dir": "$.dataset.dataPath",
+    "final_call_logs_dir": "$.params.dataset.s3|/logs/",
+    "memory_retry_multiplier": 2.0,
+    "use_relative_output_paths": true,
+    "read_from_cache": true,
+    "write_to_cache": true,
+
+    "make_capseg.capseg_rscript": "s3://btc-refdata/iconicc/reference-genome-wdlcapseg_20240730.R"
+}
