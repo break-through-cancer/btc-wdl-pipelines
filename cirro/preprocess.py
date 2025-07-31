@@ -124,7 +124,7 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
                     raise ValueError(f"sample_sex value '{normal_sex}' for patient {patient} is invalid.")
 
                 # Create the participant_id
-                participant_id = f"{normal_sample_id}_{tumor_sample_id}"
+                participant_id = f"{tumor_sample_id}_vs_{normal_sample_id}"
 
                 # Yield the data as a dictionary with workflow_prefix
                 yield {
