@@ -1,12 +1,16 @@
 {
     "form": {
-        "interval_list": {
-            "title": "interval_list",
-            "description": "Target bed file in case of whole exome or targeted sequencing or intervals file for parallelization.",
-            "type": "string",
-            "pathType": "references",
-            "file": "**/genome_bed/**/regions.bed"
-          }
+        "title": "Funcotator (GATK)",
+        "type": "object",
+        "properties": {
+            "interval_list": {
+                "title": "interval_list",
+                "description": "Target bed file in case of whole exome or targeted sequencing or intervals file for parallelization.",
+                "type": "string",
+                "pathType": "references",
+                "file": "**/genome_bed/**/regions.bed"
+            }
+        }
     },
     "ui": {}
 }
