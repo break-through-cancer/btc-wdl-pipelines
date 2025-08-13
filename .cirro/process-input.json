@@ -20,5 +20,5 @@
     "Funcotator.ref_fasta_index": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai",
     "Funcotator.reference_version": "hg38",
     "Funcotator.transcript_selection_list": "s3://btc-refdata/funcotator/transcriptList.exact_uniprot_matches.AKT1_CRLF2_FGFR1.txt",
-    "Funcotator.use_gnomad": true
+    "Funcotator.use_gnomad": false
 }
