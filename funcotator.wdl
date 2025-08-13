@@ -1,5 +1,3 @@
-version 4.6.2.0
-
 # Run Funcotator on a set of called variants.
 #
 # Description of inputs:
