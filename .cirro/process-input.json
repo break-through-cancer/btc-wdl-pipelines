@@ -8,7 +8,7 @@
 
     "Funcotator.Funcotate.cpu": 4,
     "Funcotator.Funcotate.max_retries": 2,
-    "Funcotator.Funcotate.mem": 8000,
+    "Funcotator.Funcotate.mem": 8,
     "Funcotator.compress": true,
     "Funcotator.data_sources_tar_gz": "s3://btc-refdata/funcotator/funcotator_dataSources.v1.7.20200521s.tar.gz",
     "Funcotator.Funcotate.filter_funcotations": true,
