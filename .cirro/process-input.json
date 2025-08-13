@@ -1,0 +1,24 @@
+{
+    "final_call_logs_dir": "$.params.dataset.s3|/logs/",
+    "final_workflow_outputs_dir": "$.dataset.dataPath",
+    "memory_retry_multiplier": 2,
+    "read_from_cache": true,
+    "use_relative_output_paths": true,
+    "write_to_cache": true,
+
+    "Funcotator.Funcotate.cpu": 4,
+    "Funcotator.Funcotate.max_retries": 2,
+    "Funcotator.Funcotate.mem": 8000,
+    "Funcotator.compress": true,
+    "Funcotator.data_sources_tar_gz": "s3://btc-refdata/funcotator/funcotator_dataSources.v1.7.20200521s.tar.gz",
+    "Funcotator.Funcotate.filter_funcotations": true,
+    "Funcotator.gatk_docker": "broadinstitute/gatk:4.2.4.0",
+    "Funcotator.interval_list": "$.params.dataset.paramJson.interval_list",
+    "Funcotator.output_format": "MAF",
+    "Funcotator.ref_dict": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dict",
+    "Funcotator.ref_fasta": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta",
+    "Funcotator.ref_fasta_index": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai",
+    "Funcotator.reference_version": "hg38",
+    "Funcotator.transcript_selection_list": "s3://btc-refdata/funcotator/transcriptList.exact_uniprot_matches.AKT1_CRLF2_FGFR1.txt",
+    "Funcotator.use_gnomad": true
+}
