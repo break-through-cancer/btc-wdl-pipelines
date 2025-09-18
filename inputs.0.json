@@ -6,7 +6,7 @@
     "Mutect2.ref_dict": "$.dataset.params.ref_dict",
     "Mutect2.ref_fai": "$.dataset.params.ref_fai",
     "Mutect2.ref_fasta": "$.dataset.params.ref_fasta",
-    "scatter_count": "$.dataset.params.scatter_count",
+    "Mutect2.scatter_count": "$.dataset.params.scatter_count",
     "Mutect2.tumor_reads": "$.dataset.params.tumor_reads",
     "Mutect2.tumor_reads_index": "$.dataset.params.tumor_reads_index",
     "Mutect2.m2_extra_filtering_args": "$.dataset.params.m2_extra_filtering_args",
