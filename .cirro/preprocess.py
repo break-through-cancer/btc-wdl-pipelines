@@ -5,78 +5,68 @@ from cirro.helpers.preprocess_dataset import PreprocessDataset
 PROCESS_INPUT_FILE = "process-input.json"
 WORKFLOW_PREFIX = "Mutect2"
 
-def generate_mutect2_inputs(ds: PreprocessDataset, process_inputs: dict):
-    """
-    ds: PreprocessDataset object from Cirro
-    process_inputs: dictionary loaded from process-input.json
-    """
-    all_inputs = []
+def yield_single_inputs(ds: PreprocessDataset):
+    df = ds.files  # ds.files is a DataFrame with columns ["sample", "file"]
+    for base_name, group in df.groupby("sample"):
+        if "PBMC" in base_name:
+                continue
 
-    # user-provided tumor BAM
-    user_tumor_bam = process_inputs.get("tumor_reads")
-    user_tumor_index = process_inputs.get("tumor_reads_index")
+        sample_to_analyze = None
+        sample_to_analyze_index = None
 
-    # Group files by sample
-    df = ds.files
-    for sample_name, group in df.groupby("sample"):
-        dataset_tumor_bam = None
-        dataset_tumor_index = None
-        dataset_normal_bam = None
-        dataset_normal_index = None
-
-        # Scan all files in this sample
         for f in group["file"]:
-            f_path = getattr(f, "path", str(f))  # get string path
-            fname = f_path.lower()
-            if dataset_tumor_bam is None and fname.endswith(".bam") and "tumor" in fname:
-                dataset_tumor_bam = f_path
-            elif dataset_tumor_index is None and fname.endswith(".bai") and "tumor" in fname:
-                dataset_tumor_index = f_path
-            elif dataset_normal_bam is None and fname.endswith(".bam") and "normal" in fname:
-                dataset_normal_bam = f_path
-            elif dataset_normal_index is None and fname.endswith(".bai") and "normal" in fname:
-                dataset_normal_index = f_path
+            if f.endswith(".bam") and not f.endswith(".bam.bai"):
+                sample_to_analyze = f
+            elif f.endswith(".bam.bai"):
+                sample_to_analyze_index = f
 
-        # Prefer user-provided tumor BAMs
-        final_tumor_bam = user_tumor_bam or dataset_tumor_bam
-        final_tumor_index = user_tumor_index or dataset_tumor_index
-        final_normal_bam = dataset_normal_bam
-        final_normal_index = dataset_normal_index
+        if sample_to_analyze and sample_to_analyze_index:
+            yield {
+                f"{WORKFLOW_PREFIX}.input_bam": sample_to_analyze,
+                f"{WORKFLOW_PREFIX}.input_bam_index": sample_to_analyze_index
+            }
 
-        if not final_tumor_bam or not final_tumor_index:
-            raise ValueError(f"Missing tumor BAM or index for sample {sample_name}")
 
-        # combine workflow-level inputs with sample-specific BAM paths
-        input_dict = process_inputs.copy()
-        input_dict[f"{WORKFLOW_PREFIX}.tumor_reads"] = final_tumor_bam
-        input_dict[f"{WORKFLOW_PREFIX}.tumor_reads_index"] = final_tumor_index
-        if final_normal_bam and final_normal_index:
-            input_dict[f"{WORKFLOW_PREFIX}.normal_reads"] = final_normal_bam
-            input_dict[f"{WORKFLOW_PREFIX}.normal_reads_index"] = final_normal_index
+def setup_inputs(ds: PreprocessDataset):
+    # Make a combined set of inputs with each of the BAM files
+    all_inputs = [
+        {
+            **single_input,
+            **{
+                kw: val
+                for kw, val in ds.params.items()
+                if kw.startswith(WORKFLOW_PREFIX)
+            }
+        }
+        for single_input in yield_single_inputs(ds)
+    ]
 
-        all_inputs.append(input_dict)
+    # Raise an error if no inputs are found
+    assert len(all_inputs) > 0, "No inputs found -- stopping execution"
 
-    return all_inputs
+    # complete set of inputs
+    write_json("inputs.json", all_inputs)
+
+    #individual
+    for i, input in enumerate(all_inputs):
+        write_json(f"inputs.{i}.json", input)
+
+def write_json(fp, obj, indent=4) -> None:
+
+    with open(fp, "wt") as handle:
+        json.dump(obj, handle, indent=indent)
 
 
 def main():
-    # Load running dataset via Cirro
+    """Primary entrypoint for the script"""
+
+    # Get information on the analysis launched by the user
     ds = PreprocessDataset.from_running()
 
-    # Load process-input.json
-    with open(PROCESS_INPUT_FILE) as f:
-        process_inputs = json.load(f)
+    # # Set up the options.json file
+    # setup_options(ds)
 
-    # Generate all input dictionaries
-    all_inputs = generate_mutect2_inputs(ds, process_inputs)
-
-    # Write JSON files for each sample/run
-    for i, input_dict in enumerate(all_inputs):
-        with open(f"inputs.{i}.json", "w") as f:
-            json.dump(input_dict, f, indent=4)
-
-    print(f"Generated {len(all_inputs)} input JSON(s) for {WORKFLOW_PREFIX}.")
-
+    setup_inputs(ds)
 
 if __name__ == "__main__":
     main()
