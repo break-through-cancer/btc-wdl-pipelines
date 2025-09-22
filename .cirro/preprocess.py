@@ -13,17 +13,31 @@ def yield_single_inputs(ds: PreprocessDataset):
 
         sample_to_analyze = None
         sample_to_analyze_index = None
+        normal_bam = None
+        normal_bai = None
 
         for f in group["file"]:
             if f.endswith(".bam") and not f.endswith(".bam.bai"):
-                sample_to_analyze = f
+                if "PBMC" in base_name:
+                    normal_bam = f
+                else:
+                    sample_to_analyze = f
             elif f.endswith(".bam.bai"):
-                sample_to_analyze_index = f
+                if "PBMC" in base_name:
+                    normal_bai = f
+                else:
+                    sample_to_analyze_index = f
 
         if sample_to_analyze and sample_to_analyze_index:
             yield {
                 f"{WORKFLOW_PREFIX}.input_bam": sample_to_analyze,
                 f"{WORKFLOW_PREFIX}.input_bam_index": sample_to_analyze_index
+            }
+        
+        if normal_bam and normal_bai:
+            yield {
+                f"{WORKFLOW_PREFIX}.normal_bam": normal_bam,
+                f"{WORKFLOW_PREFIX}.normal_bam_index": normal_bai
             }
 
 
