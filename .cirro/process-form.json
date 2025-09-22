@@ -88,8 +88,8 @@
         "file": "**/*"
       },
       "normal_reads_index": {
-        "title": "mem",
-        "description": "amount of memory you're running on",
+        "title": "normal reads index",
+        "description": "indx of the normal reads bam file",
         "type": "string",
         "multiple": false,
         "pathType": "dataset",
