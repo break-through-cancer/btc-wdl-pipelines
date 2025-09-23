@@ -3,31 +3,39 @@
     "title": "Mutect2 (GATK)",
     "type": "object",
     "properties": {
-      "input_dataset": {
-        "title": "Datasets to use",
+      "gatk_docker": {
+        "title": "gatk docker",
         "type": "string",
-        "pathType": "dataset"
+        "default": "broadinstitute/gatk:4.2.4.0"
       },
       "ref_fasta": {
         "title": "Reference FASTA",
         "type": "string",
         "pathType": "reference",
-        "file": "**/*.fasta"
+        "file": "**/*.fasta",
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
       },
       "ref_fai": {
         "title": "Reference FAI",
         "type": "string",
         "pathType": "reference",
-        "file": "**/*.fai"
+        "file": "**/*.fai",
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
       },
       "ref_dict": {
-        "title": "Reference dict",
+        "title": "Reference Dict",
         "type": "string",
         "pathType": "reference",
-        "file": "**/*.dict"
+        "file": "**/*.dict",
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dict"
+      },
+      "scatter_count": {
+        "title": "scatter count",
+        "type": "integer",
+        "default": 50
       }
     },
-    "required": ["input_dataset", "ref_fasta", "ref_fai", "ref_dict"]
+    "required": ["gatk_docker", "ref_fasta", "ref_fai", "ref_dict"]
   },
   "ui": {}
 }
