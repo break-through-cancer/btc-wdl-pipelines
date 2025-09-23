@@ -3,39 +3,10 @@
     "title": "Mutect2 (GATK)",
     "type": "object",
     "properties": {
-      "samples": {
-        "title": "Samples",
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "tumor_reads": {
-              "title": "Tumor BAM",
-              "type": "string",
-              "pathType": "dataset",
-              "file": "**/*.bam"
-            },
-            "tumor_reads_index": {
-              "title": "Tumor BAM Index",
-              "type": "string",
-              "pathType": "dataset",
-              "file": "**/*.bai"
-            },
-            "normal_reads": {
-              "title": "Normal BAM",
-              "type": "string",
-              "pathType": "dataset",
-              "file": "**/*.bam"
-            },
-            "normal_reads_index": {
-              "title": "Normal BAM Index",
-              "type": "string",
-              "pathType": "dataset",
-              "file": "**/*.bai"
-            }
-          },
-          "required": ["tumor_reads", "tumor_reads_index"]
-        }
+      "input_dataset": {
+        "title": "Datasets to use",
+        "type": "string",
+        "pathType": "dataset"
       },
       "ref_fasta": {
         "title": "Reference FASTA",
@@ -56,7 +27,7 @@
         "file": "**/*.dict"
       }
     },
-    "required": ["samples", "ref_fasta", "ref_fai", "ref_dict"]
+    "required": ["input_dataset", "ref_fasta", "ref_fai", "ref_dict"]
   },
   "ui": {}
 }
