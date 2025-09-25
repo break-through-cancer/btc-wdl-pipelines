@@ -12,7 +12,6 @@
     "Mutect2.m2_extra_filtering_args": "$.dataset.params.m2_extra_filtering_args",
     "Mutect2.m2_extra_args": "$.dataset.params.m2_extra_args",
     "Mutect2.cpu": "$.dataset.params.cpu",
-    "Mutect2.mem": "$.dataset.params.mem",
-    "Mutect2.use_gnomad": false
+    "Mutect2.mem": "$.dataset.params.mem"
 
 }
