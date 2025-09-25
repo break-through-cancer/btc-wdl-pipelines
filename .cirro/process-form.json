@@ -12,41 +12,29 @@
       "ref_dict": {
         "title": "reference dict",
         "description": "",
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
+        "type": "string",
+        "multiple": false,
         "pathType": "reference",
         "file": "**/*",
-        "default": [
-          "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dict"
-        ]
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dict"
       },
       "ref_fai": {
         "title": "reference fai",
         "description": "",
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
+        "type": "string",
+        "multiple": false,
         "pathType": "reference",
         "file": "**/*",
-        "default": [
-          "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
-        ]
+        "default":"s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
       },
       "ref_fasta": {
         "title": "reference fasta",
         "description": "",
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
+        "type": "string",
+        "multiple": false,
         "pathType": "reference",
         "file": "**/*",
-        "default": [
-          "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
-        ]
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
       },
       "scatter_count": {
         "title": "scatter count",
