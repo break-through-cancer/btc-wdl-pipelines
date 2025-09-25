@@ -95,14 +95,20 @@ def setup_options(ds: PreprocessDataset):
     write_json("options.json", options)
     print("Options written:", options)
 
-def collapse_arrays(d): #workaround for weird cirro bug
-    new = {}
-    for k, v in d.items():
-        if isinstance(v, list) and len(v) == 1:
-            new[k] = v[0]   # unwrap single-element arrays
-        else:
-            new[k] = v
-    return new
+def collapse_arrays(obj): #workaround for weird cirro bug
+    if isinstance(obj, list):
+        # you have a list of dicts (like all_inputs)
+        return [collapse_arrays(o) for o in obj]
+    elif isinstance(obj, dict):
+        new = {}
+        for k, v in obj.items():
+            if isinstance(v, list) and len(v) == 1:
+                new[k] = v[0]
+            else:
+                new[k] = v
+        return new
+    else:
+        return obj
 
 
 def main():
