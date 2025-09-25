@@ -90,10 +90,20 @@ def setup_options(ds: PreprocessDataset):
         for kw, val in ds.params.items()
         if not kw.startswith(WORKFLOW_PREFIX)
     }
-
+    options = collapse_arrays(options)
     # Write out to the options.json file
     write_json("options.json", options)
     print("Options written:", options)
+
+def collapse_arrays(d): #workaround for weird cirro bug
+    new = {}
+    for k, v in d.items():
+        if isinstance(v, list) and len(v) == 1:
+            new[k] = v[0]   # unwrap single-element arrays
+        else:
+            new[k] = v
+    return new
+
 
 def main():
     """Primary entrypoint for the script"""
