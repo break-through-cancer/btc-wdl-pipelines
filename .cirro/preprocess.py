@@ -99,7 +99,7 @@ def main():
     ds = PreprocessDataset.from_running()
 
     # # Set up the options.json file
-    # setup_options(ds)
+    setup_options(ds)
 
     setup_inputs(ds)
 
