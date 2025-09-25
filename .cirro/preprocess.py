@@ -64,6 +64,8 @@ def setup_inputs(ds: PreprocessDataset):
     #individual
     for i, input in enumerate(all_inputs):
         write_json(f"inputs.{i}.json", input)
+    print("Inputs written:", all_inputs)
+
 
 def write_json(fp, obj, indent=4) -> None:
 
@@ -91,6 +93,7 @@ def setup_options(ds: PreprocessDataset):
 
     # Write out to the options.json file
     write_json("options.json", options)
+    print("Options written:", options)
 
 def main():
     """Primary entrypoint for the script"""
