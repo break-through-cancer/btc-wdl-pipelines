@@ -70,6 +70,28 @@ def write_json(fp, obj, indent=4) -> None:
     with open(fp, "wt") as handle:
         json.dump(obj, handle, indent=indent)
 
+def setup_options(ds: PreprocessDataset):
+
+    # Set up the scriptBucketName, which is needed by the workflow
+    # to stage analysis scripts
+    ds.add_param(
+        "scriptBucketName",
+        S3Path(ds.params['final_workflow_outputs_dir']).bucket
+    )
+
+    # Isolate the options arguments for the workflow
+    # Define a new dictionary which contains all of the items
+    # from `ds.params` which do not start with the workflow
+    # prefix
+    options = {
+        kw: val
+        for kw, val in ds.params.items()
+        if not kw.startswith(WORKFLOW_PREFIX)
+    }
+
+    # Write out to the options.json file
+    write_json("options.json", options)
+
 
 def main():
     """Primary entrypoint for the script"""
@@ -79,6 +101,7 @@ def main():
 
     # # Set up the options.json file
     # setup_options(ds)
+    setup_options(ds)
 
     setup_inputs(ds)
 
