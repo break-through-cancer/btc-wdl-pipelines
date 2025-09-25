@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import json
 from cirro.helpers.preprocess_dataset import PreprocessDataset
-
+from cirro.api.models.s3_path import S3Path
 PROCESS_INPUT_FILE = "process-input.json"
 WORKFLOW_PREFIX = "Mutect2"
 
@@ -92,7 +92,6 @@ def setup_options(ds: PreprocessDataset):
     # Write out to the options.json file
     write_json("options.json", options)
 
-
 def main():
     """Primary entrypoint for the script"""
 
@@ -101,7 +100,6 @@ def main():
 
     # # Set up the options.json file
     # setup_options(ds)
-    setup_options(ds)
 
     setup_inputs(ds)
 
