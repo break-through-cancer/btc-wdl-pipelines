@@ -30,8 +30,8 @@ def yield_single_inputs(ds: PreprocessDataset):
 
         if sample_to_analyze and sample_to_analyze_index:
             yield {
-                f"{WORKFLOW_PREFIX}.input_bam": sample_to_analyze,
-                f"{WORKFLOW_PREFIX}.input_bam_index": sample_to_analyze_index
+                f"{WORKFLOW_PREFIX}.tumor_reads": sample_to_analyze,
+                f"{WORKFLOW_PREFIX}.tumor_reads_index": sample_to_analyze_index
             }
         
         if normal_bam and normal_bai:
@@ -78,7 +78,7 @@ def setup_options(ds: PreprocessDataset):
     # to stage analysis scripts
     ds.add_param(
         "scriptBucketName",
-        S3Path(ds.params['final_workflow_outputs_dir']).bucket
+        S3Path(ds.params['out_dir']).bucket
     )
 
     # Isolate the options arguments for the workflow
