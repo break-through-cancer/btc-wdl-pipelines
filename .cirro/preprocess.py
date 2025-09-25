@@ -57,7 +57,7 @@ def setup_inputs(ds: PreprocessDataset):
 
     # Raise an error if no inputs are found
     assert len(all_inputs) > 0, "No inputs found -- stopping execution"
-
+    all_inputs = collapse_arrays(all_inputs)
     # complete set of inputs
     write_json("inputs.json", all_inputs)
 
