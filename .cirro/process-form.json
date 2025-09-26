@@ -54,6 +54,22 @@
         "type": "integer",
         "default": 50
       },
+      "tumor_reads": {
+        "title": "tumor reads",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "dataset",
+        "file": "**/*"
+      },
+      "tumor_reads_index": {
+        "title": "tumor reads index",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "dataset",
+        "file": "**/*"
+      },
       "m2_extra_filtering_args": {
         "title": "extra filtering args",
         "description": "(optional) a string of additional command line arguments of the form \"-argument1 value1 -argument2 value2\" for Mutect 2 filtering. Most users will not need this",
@@ -86,7 +102,7 @@
       "normal_reads_index": {
         "title": "normal reads index",
         "description": "indx of the normal reads bam file",
-        "type": "File",
+        "type": "string",
         "multiple": false,
         "pathType": "dataset",
         "file": "**/*"
