@@ -57,7 +57,7 @@
       "tumor_reads": {
         "title": "tumor reads",
         "description": "",
-        "type": "string",
+        "type": "File",
         "multiple": false,
         "pathType": "dataset",
         "file": "**/*"
@@ -65,7 +65,7 @@
       "tumor_reads_index": {
         "title": "tumor reads index",
         "description": "",
-        "type": "string",
+        "type": "File",
         "multiple": false,
         "pathType": "dataset",
         "file": "**/*"
@@ -94,7 +94,7 @@
       "normal_reads": {
         "title": "normal reads",
         "description": "to compare somatic mutations to in order to make sure its not germline",
-        "type": "string",
+        "type": "File",
         "multiple": false,
         "pathType": "dataset",
         "file": "**/*"
@@ -102,7 +102,7 @@
       "normal_reads_index": {
         "title": "normal reads index",
         "description": "indx of the normal reads bam file",
-        "type": "string",
+        "type": "File",
         "multiple": false,
         "pathType": "dataset",
         "file": "**/*"
