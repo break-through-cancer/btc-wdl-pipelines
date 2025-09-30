@@ -389,7 +389,7 @@ task SplitIntervals {
     }
 
     output {
-        Array[File] interval_files = glob("~{outDir}/*.interval_list")
+        Array[File] interval_files = glob("~{out_dir}/*.interval_list")
     }
 }
 
