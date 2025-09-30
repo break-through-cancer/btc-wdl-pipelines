@@ -13,5 +13,7 @@
     "Mutect2.m2_extra_args": "$.dataset.params.m2_extra_args",
     "Mutect2.M2.cpu": "$.dataset.params.cpu",
     "Mutect2.M2.mem": "$.dataset.params.mem",
-    "Mutect2.intervals": "s3://broad-references/hg38/v0/wgs_calling_regions.hg38.interval_list"
+    "Mutect2.intervals": "s3://broad-references/hg38/v0/wgs_calling_regions.hg38.interval_list",
+    "Mutect2.masked_intervals": null
+
 }

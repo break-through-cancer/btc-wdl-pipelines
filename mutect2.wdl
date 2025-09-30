@@ -363,17 +363,20 @@ task SplitIntervals {
       Runtime runtime_params
     }
 
-    command <<<
+    command {
         set -e
-        mkdir -p "${PWD}/interval-files"
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
+
+        mkdir interval-files
         gatk --java-options "-Xmx~{runtime_params.command_mem}m" SplitIntervals \
             -R ~{ref_fasta} \
-            -L ~{intervals} \
+            ~{"-L " + intervals} \
+            ~{"-XL " + masked_intervals} \
             -scatter ~{scatter_count} \
-            -O "${PWD}/interval-files"
-        cp "${PWD}/interval-files"/*.interval_list .
-    >>>
-
+            -O interval-files \
+            ~{split_intervals_extra_args}
+        cp interval-files/*.interval_list .
+    }
 
     runtime {
         docker: runtime_params.gatk_docker
