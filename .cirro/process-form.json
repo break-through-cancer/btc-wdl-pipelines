@@ -109,6 +109,7 @@
       }
     },
     "required": [
+        "gatk_docker",
         "ref_dict",
         "ref_fai",
         "ref_fasta",
