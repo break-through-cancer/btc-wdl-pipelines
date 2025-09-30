@@ -9,45 +9,6 @@
         "type": "string",
         "default":"broadinstitute/gatk:4.2.4.0"
       },
-      "ref_dict": {
-        "title": "reference dict",
-        "description": "",
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "pathType": "reference",
-        "file": "**/*",
-        "default": [
-          "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dict"
-        ]
-      },
-      "ref_fai": {
-        "title": "reference fai",
-        "description": "",
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "pathType": "reference",
-        "file": "**/*",
-        "default": [
-          "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
-        ]
-      },
-      "ref_fasta": {
-        "title": "reference fasta",
-        "description": "",
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "pathType": "reference",
-        "file": "**/*",
-        "default": [
-          "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
-        ]
-      },
       "scatter_count": {
         "title": "scatter count",
         "description": "Number of executions to split the Mutect2 task into. The more you put here, the faster Mutect2 will return results, but at a higher cost of resources.",
