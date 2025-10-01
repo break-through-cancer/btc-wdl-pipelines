@@ -390,6 +390,8 @@ task SplitIntervals {
 
     output {
         Array[File] interval_files = glob("interval_files/*.interval_list")
+        File log = stdout()
+        File err = stderr()
     }
 }
 
