@@ -376,6 +376,10 @@ task SplitIntervals {
             -O interval-files \
             ~{split_intervals_extra_args}
         cp interval-files/*.interval_list .
+
+        # optional sanity check
+        echo "Scattered files generated:"
+        ls -lh interval-files
     }
 
     runtime {
@@ -389,7 +393,7 @@ task SplitIntervals {
     }
 
     output {
-        Array[File] interval_files = glob("interval_files/*.interval_list")
+        Array[File] interval_files = glob("interval-files/*.interval_list")
         File log = stdout()
         File err = stderr()
     }
