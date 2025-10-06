@@ -367,7 +367,9 @@ task SplitIntervals {
         set -e
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" runtime_params.gatk_override}
 
+        ### CIRRO EDIT
         mkdir interval-files
+        ####
         gatk --java-options "-Xmx~{runtime_params.command_mem}m" SplitIntervals \
             -R ~{ref_fasta} \
             ~{"-L " + intervals} \
@@ -480,6 +482,15 @@ task M2 {
 
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk_override}
 
+        #CIRRO EDIT
+
+        mkdir pileup-tables
+        touch pileup-tables/tumor-pileups.table
+        touch pileup-tables/normal-pileups.table
+
+        ###
+
+
         # We need to create these files regardless, even if they stay empty
         touch bamout.bam
         touch f1r2.tar.gz
@@ -528,13 +539,13 @@ task M2 {
 
         if [[ ! -z "~{variants_for_contamination}" ]]; then
             gatk --java-options "-Xmx~{command_mem}m" GetPileupSummaries -R ~{ref_fasta} -I ~{tumor_reads} ~{"--interval-set-rule INTERSECTION -L " + intervals} \
-                -V ~{variants_for_contamination} -L ~{variants_for_contamination} -O tumor-pileups.table ~{getpileupsummaries_extra_args} \
+                -V ~{variants_for_contamination} -L ~{variants_for_contamination} -O pileup-tables/tumor-pileups.table ~{getpileupsummaries_extra_args} \
                 ~{"--gcs-project-for-requester-pays " + gcs_project_for_requester_pays}
 
 
             if [[ ! -z "~{normal_reads}" ]]; then
                 gatk --java-options "-Xmx~{command_mem}m" GetPileupSummaries -R ~{ref_fasta} -I ~{normal_reads} ~{"--interval-set-rule INTERSECTION -L " + intervals} \
-                    -V ~{variants_for_contamination} -L ~{variants_for_contamination} -O normal-pileups.table ~{getpileupsummaries_extra_args} \
+                    -V ~{variants_for_contamination} -L ~{variants_for_contamination} -O pileup-tables/normal-pileups.table ~{getpileupsummaries_extra_args} \
                     ~{"--gcs-project-for-requester-pays " + gcs_project_for_requester_pays}
             fi
         fi
@@ -559,8 +570,12 @@ task M2 {
         File output_bamOut = "bamout.bam"
         File stats = "~{output_stats}"
         File f1r2_counts = "f1r2.tar.gz"
-        Array[File] tumor_pileups = glob("*tumor-pileups.table")
-        Array[File] normal_pileups = glob("*normal-pileups.table")
+        #Cirro edit
+        Array[File] tumor_pileups = glob("pileup-tables/*tumor-pileups.table")
+        Array[File] normal_pileups = glob("pileup-tables/*normal-pileups.table")
+        ###
+        #Array[File] tumor_pileups = glob("*tumor-pileups.table")
+        #Array[File] normal_pileups = glob("*normal-pileups.table")
         File permutect_training_dataset = "training-dataset.txt"
         File permutect_test_dataset = "test-dataset.txt"
         File permutect_contigs_table = "contigs.table"
