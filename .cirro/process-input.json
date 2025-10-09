@@ -1,10 +1,9 @@
 {
     "read_from_cache": true,
     "write_to_cache": true,
-     "final_call_logs_dir": "$.params.dataset.s3|/logs/",
+    "final_call_logs_dir": "$.params.dataset.s3|/logs/",
     "final_workflow_outputs_dir": "$.dataset.dataPath",
     "memory_retry_multiplier": 2,
-    "use_relative_output_paths": true,
     "Mutect2.gatk_docker": "$.dataset.params.gatk_docker",
     "Mutect2.ref_dict": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dict",
     "Mutect2.ref_fai": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai",
