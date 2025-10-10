@@ -562,6 +562,7 @@ task M2 {
         preemptible: select_first([preemptible, 10])
         maxRetries: select_first([max_retries, 0])
         cpu: select_first([cpu, 1])
+        continueOnReturnCode: [0, 1]
     }
 
     output {
