@@ -67,6 +67,11 @@
         "multiple": false,
         "pathType": "dataset",
         "file": "**/*"
+      },
+      "joint_calling": {
+        "title": "Joint calling",
+        "description": "If you have multiple inputs, indicate if you want them to be processed separately or in joint calling fashion",
+        "type": "boolean"
       }
     },
     "required": [

@@ -15,7 +15,7 @@ def collapse_arrays(obj):
     elif isinstance(obj, dict):
         new = {}
         for k, v in obj.items():
-            if isinstance(v, list) and len(v) == 1:
+            if isinstance(v, list) and len(v) == 1 and not k.endswith("tumor_reads") and not k.endswith("normal_reads"):
                 new[k] = v[0]
             else:
                 new[k] = v
@@ -55,6 +55,39 @@ def yield_single_inputs(ds: PreprocessDataset):
                 f"{WORKFLOW_PREFIX}.normal_reads_index": normal_bai,
             }
 
+def yield_joint_inputs(ds: PreprocessDataset):
+    df = ds.files
+    for base_name, group in df.groupby("sample"):
+        if "PBMC" in base_name:
+            continue
+        tumor_bams = []
+        tumor_bais = []
+        normal_bams = []
+        normal_bais = []
+
+        for f in group["file"]:
+            if f.endswith(".bam") and not f.endswith(".bam.bai"):
+                if "PBMC" in f or "normal" in f.lower():
+                    normal_bams.append(f)
+                else:
+                    tumor_bams.append(f)
+            elif f.endswith(".bam.bai"):
+                if "PBMC" in f or "normal" in f.lower():
+                    normal_bais.append(f)
+                else:
+                    tumor_bais.append(f)
+
+        inputs = {}
+        if tumor_bams and tumor_bais:
+            inputs[f"{WORKFLOW_PREFIX}.tumor_reads"] = tumor_bams
+            inputs[f"{WORKFLOW_PREFIX}.tumor_reads_index"] = tumor_bais
+        if normal_bams and normal_bais:
+            inputs[f"{WORKFLOW_PREFIX}.normal_reads"] = normal_bams
+            inputs[f"{WORKFLOW_PREFIX}.normal_reads_index"] = normal_bais
+
+        if inputs:
+            yield inputs
+
 def setup_inputs(ds: PreprocessDataset):
     # Load the process-input.json file if it exists
     try:
@@ -64,7 +97,17 @@ def setup_inputs(ds: PreprocessDataset):
         process_inputs = {}
 
     all_inputs = []
-    for single_input in yield_single_inputs(ds):
+
+    # Decide which generator to use based on joint_calling
+    if getattr(ds.params, "joint_calling", False):
+        input_generator = yield_single_inputs(ds)
+        print("Using single inputs")
+    else:
+        input_generator = yield_joint_inputs(ds)
+        print("Using joint inputs")
+
+    # Iterate over the chosen generator
+    for input_dict in input_generator:
         # Merge everything together:
         # 1. fields from process-input.json
         # 2. workflow-specific parameters from ds.params
@@ -72,14 +115,14 @@ def setup_inputs(ds: PreprocessDataset):
         combined = {
             **process_inputs,
             **{k: v for k, v in ds.params.items() if k.startswith(WORKFLOW_PREFIX)},
-            **single_input
+            **input_dict
         }
         all_inputs.append(combined)
 
     assert all_inputs, "No inputs found -- stopping execution"
     all_inputs = collapse_arrays(all_inputs)
-    # write_json("inputs.json", all_inputs)
 
+    # Write individual JSON files
     for i, inp in enumerate(all_inputs):
         write_json(f"inputs.{i}.json", inp)
 
