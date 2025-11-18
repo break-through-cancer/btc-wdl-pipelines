@@ -16,21 +16,23 @@
         "default": 50
       },
       "tumor_reads": {
-        "title": "tumor reads",
-        "description": "",
-        "type": "string",
-        "multiple": false,
-        "pathType": "dataset",
-        "file": "**/*"
-      },
-      "tumor_reads_index": {
-        "title": "tumor reads index",
-        "description": "",
-        "type": "string",
-        "multiple": false,
-        "pathType": "dataset",
-        "file": "**/*"
-      },
+      "title": "tumor reads",
+      "description": "",
+      "type": "array",
+      "items": { "type": "string" },
+      "multiple": true,
+      "pathType": "dataset",
+      "file": "**/*"
+    },
+    "tumor_reads_index": {
+      "title": "tumor reads index",
+      "description": "",
+      "type": "array",
+      "items": { "type": "string" },
+      "multiple": true,
+      "pathType": "dataset",
+      "file": "**/*"
+    },
       "m2_extra_filtering_args": {
         "title": "extra filtering args",
         "description": "(optional) a string of additional command line arguments of the form \"-argument1 value1 -argument2 value2\" for Mutect 2 filtering. Most users will not need this",
@@ -53,18 +55,20 @@
         "default":100
       },
       "normal_reads": {
-        "title": "normal reads",
-        "description": "to compare somatic mutations to in order to make sure its not germline",
-        "type": "string",
-        "multiple": false,
-        "pathType": "dataset",
-        "file": "**/*"
+      "title": "normal reads",
+      "description": "",
+      "type": "array",
+      "items": { "type": "string" },
+      "multiple": true,
+      "pathType": "dataset",
+      "file": "**/*"
       },
       "normal_reads_index": {
         "title": "normal reads index",
-        "description": "indx of the normal reads bam file",
-        "type": "string",
-        "multiple": false,
+        "description": "",
+        "type": "array",
+        "items": { "type": "string" },
+        "multiple": true,
         "pathType": "dataset",
         "file": "**/*"
       },
