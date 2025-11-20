@@ -99,11 +99,11 @@ def setup_inputs(ds: PreprocessDataset):
     all_inputs = []
 
     if getattr(ds.params, "joint_calling", False):
-        input_generator = yield_joint_inputs(ds)
-        print("Using joint inputs")
-    else:
         input_generator = yield_single_inputs(ds)
         print("Using single inputs")
+    else:
+        input_generator = yield_joint_inputs(ds)
+        print("Using joint inputs")
 
 
     # Iterate over the chosen generator
