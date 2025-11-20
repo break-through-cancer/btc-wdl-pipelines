@@ -59,27 +59,25 @@
         "default":100
       },
       "normal_reads": {
-        "title": "normal reads",
-        "description": "",
-        "type": "array",
-        "items": {
-          "type": "string",
-          "pathType": "dataset",
-          "file": "**/*"
-        },
-        "uniqueItems": false
+      "title": "normal reads",
+      "description": "",
+      "type": "array",
+      "items": { "type": "string" },
+      "multiple": true,
+      "pathType": "dataset",
+      "file": "**/*"
       },
       "normal_reads_index": {
         "title": "normal reads index",
-        "description": "",
+        "description": "Select one or more normal reads files",
         "type": "array",
-        "items": {
-          "type": "string",
-          "pathType": "dataset",
-          "file": "**/*"
+        "items": { 
+            "type": "path",
+            "pathType": "dataset",
+            "file": "**/*"
         },
-        "uniqueItems": false
-      },
+        "multiple": true
+    },
       "joint_calling": {
         "title": "Joint calling",
         "description": "If you have multiple inputs, indicate if you want them to be processed separately or in joint calling fashion",
