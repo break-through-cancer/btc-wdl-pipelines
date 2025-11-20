@@ -19,20 +19,24 @@
       "title": "tumor reads",
       "description": "",
       "type": "array",
-      "items": { "type": "string" },
-      "multiple": true,
-      "pathType": "dataset",
-      "file": "**/*"
-    },
-    "tumor_reads_index": {
-      "title": "tumor reads index",
-      "description": "",
-      "type": "array",
-      "items": { "type": "string" },
-      "multiple": true,
-      "pathType": "dataset",
-      "file": "**/*"
-    },
+      "items": {
+        "type": "string",
+        "pathType": "dataset",
+        "file": "**/*"
+      },
+      "uniqueItems": false
+      },
+      "tumor_reads_index": {
+        "title": "tumor reads index",
+        "description": "",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pathType": "dataset",
+          "file": "**/*"
+        },
+        "uniqueItems": false
+      },
       "m2_extra_filtering_args": {
         "title": "extra filtering args",
         "description": "(optional) a string of additional command line arguments of the form \"-argument1 value1 -argument2 value2\" for Mutect 2 filtering. Most users will not need this",
@@ -55,22 +59,26 @@
         "default":100
       },
       "normal_reads": {
-      "title": "normal reads",
-      "description": "",
-      "type": "array",
-      "items": { "type": "string" },
-      "multiple": true,
-      "pathType": "dataset",
-      "file": "**/*"
+        "title": "normal reads",
+        "description": "",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pathType": "dataset",
+          "file": "**/*"
+        },
+        "uniqueItems": false
       },
       "normal_reads_index": {
         "title": "normal reads index",
         "description": "",
         "type": "array",
-        "items": { "type": "string" },
-        "multiple": true,
-        "pathType": "dataset",
-        "file": "**/*"
+        "items": {
+          "type": "string",
+          "pathType": "dataset",
+          "file": "**/*"
+        },
+        "uniqueItems": false
       },
       "joint_calling": {
         "title": "Joint calling",
