@@ -1,0 +1,95 @@
+{
+  "form": {
+    "title": "Mutect2 (GATK)",
+    "type": "object",
+    "properties": {
+      "gatk_docker": {
+        "title": "gatk docker",
+        "description": " Docker image to use for Mutect2 tasks. This is only used for backends configured to use docker.",
+        "type": "string",
+        "default":"broadinstitute/gatk:4.2.4.0"
+      },
+      "ref_dict": {
+        "title": "reference dict",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*",
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dict"
+      },
+      "ref_fai": {
+        "title": "reference fai",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*",
+        "default":"s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
+      },
+      "ref_fasta": {
+        "title": "reference fasta",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*",
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
+      },
+      "scatter_count": {
+        "title": "scatter count",
+        "description": "Number of executions to split the Mutect2 task into. The more you put here, the faster Mutect2 will return results, but at a higher cost of resources.",
+        "type": "integer",
+        "default": 50
+      },
+      "tumor_reads": {
+        "title": "tumor reads",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "dataset",
+        "file": "**/*"
+      },
+      "tumor_reads_index": {
+        "title": "tumor reads index",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "dataset",
+        "file": "**/*"
+      },
+      "m2_extra_filtering_args": {
+        "title": "extra filtering args",
+        "description": "(optional) a string of additional command line arguments of the form \"-argument1 value1 -argument2 value2\" for Mutect 2 filtering. Most users will not need this",
+        "type": "string"
+      },
+      "m2_extra_args": {
+        "title": "extra args",
+        "description": "(optional) a string of additional command line arguments of the form \"-argument1 value1 -argument2 value2\" for Mutect 2. Most users will not need this",
+        "type": "string"
+      },
+      "cpu": {
+        "title": "cpu",
+        "description": "amount of cpu you're running on",
+        "type": "integer"
+      },
+      "mem": {
+        "title": "mem",
+        "description": "amount of memory you're running on",
+        "type": "integer",
+        "default":100
+      }
+    },
+    "required": [
+        "gatk_docker",
+        "ref_dict",
+        "ref_fai",
+        "ref_fasta",
+        "scatter_count",
+        "tumor_reads",
+        "tumor_reads_index"
+
+    ]
+  },
+  "ui": {}
+}

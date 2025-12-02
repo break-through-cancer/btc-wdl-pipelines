@@ -1,0 +1,25 @@
+{
+    "read_from_cache": true,
+    "write_to_cache": true,
+    "out_dir": "$.dataset.dataPath",
+    "gatk_docker": "$.dataset.params.gatk_docker",
+    "ref_dict": "$.dataset.params.ref_dict",
+    "ref_fai": "$.dataset.params.ref_fai",
+    "ref_fasta": "$.dataset.params.ref_fasta",
+    "scatter_count": "$.dataset.params.scatter_count",
+    "tumor_reads": "$.dataset.params.tumor_reads",
+    "tumor_reads_index": "$.dataset.params.tumor_reads_index",
+    "m2_extra_filtering_args": "$.dataset.params.m2_extra_filtering_args",
+    "m2_extra_args": "$.dataset.params.m2_extra_args",
+    "cpu": "$.dataset.params.cpu",
+    "mem": "$.dataset.params.mem",
+    "Mutect2.gatk_docker": "broadinstitute/gatk:4.0.11.0",
+    "Mutect2.gnomad": "gs://gnomad-public/release/2.1/vcf/genomes/gnomad.genomes.r2.1.sites.vcf.bgz",
+    "Mutect2.gnomad_idx": "gs://gnomad-public/release/2.1/vcf/genomes/gnomad.genomes.r2.1.sites.vcf.bgz.tbi",
+    "Mutect2.gnomad_version": "2.1",
+    "Mutect2.minimum_allele_frequency": "0.0",
+
+    "Mutect2.mem_gb": "128",
+    "Mutect2.disk_space_gb": "16384",
+    "Mutect2.boot_disk_size_gb": "100"
+}
