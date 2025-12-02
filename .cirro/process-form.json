@@ -55,9 +55,6 @@
     },
     "required": [
         "gatk_docker",
-        "ref_dict",
-        "ref_fai",
-        "ref_fasta",
         "scatter_count",
         "tumor_reads",
         "tumor_reads_index"
