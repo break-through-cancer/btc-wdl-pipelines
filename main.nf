@@ -2,39 +2,29 @@ process mutect_wrapper {
     tag "$meta.id"
     label 'process_medium'
 
-    conda "${moduleDir}/environment.yml"
-    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/gatk4:4.5.0.0--py36hdfd78af_0':
-        'biocontainers/gatk4:4.5.0.0--py36hdfd78af_0' }"
+    // conda "${moduleDir}/environment.yml"
+    container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
     input:
-    tuple val(meta), path(input), path(input_index), path(intervals)
-    tuple val(meta2), path(fasta)
-    tuple val(meta3), path(fai)
-    tuple val(meta4), path(dict)
-    path(germline_resource)
-    path(germline_resource_tbi)
-    path(panel_of_normals)
-    path(panel_of_normals_tbi)
+    path tumor_bam
+    path tumor_bam_index
+    path ref_fasta
+    path ref_fai
+    path ref_dict
+    path gnomad_vcf
+    path gnomad_idx
+    path pon      optional true
+    val extra_args optional true
 
     output:
-    tuple val(meta), path("*.vcf.gz")     , emit: vcf
-    tuple val(meta), path("*.tbi")        , emit: tbi
-    tuple val(meta), path("*.stats")      , emit: stats
-    tuple val(meta), path("*.f1r2.tar.gz"), optional:true, emit: f1r2
-    path "versions.yml"                   , emit: versions
-
-    when:
-    task.ext.when == null || task.ext.when
+    path "*.vcf.gz", emit: vcf
+    path "*.vcf.gz.tbi", emit: tbi
+    path "*.stats", emit: stats
+    path "*.f1r2.tar.gz", optional: true, emit: f1r2
+    path "versions.yml", emit: versions
 
     script:
-    def args = task.ext.args ?: ''
-    def prefix = task.ext.prefix ?: "${meta.id}"
-    def inputs = input.collect{ "--input $it"}.join(" ")
-    def interval_command = intervals ? "--intervals $intervals" : ""
-    def pon_command = panel_of_normals ? "--panel-of-normals $panel_of_normals" : ""
-    def gr_command = germline_resource ? "--germline-resource $germline_resource" : ""
-
+    
     def avail_mem = 3072
     if (!task.memory) {
         log.info '[GATK Mutect2] Available memory not known - defaulting to 3GB. Specify process memory requirements to change this.'
@@ -42,16 +32,17 @@ process mutect_wrapper {
         avail_mem = (task.memory.mega*0.8).intValue()
     }
     """
-    gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" \\
-        Mutect2 \\
-        $inputs \\
-        --output ${prefix}.vcf.gz \\
-        --reference $fasta \\
-        $pon_command \\
-        $gr_command \\
-        $interval_command \\
-        --tmp-dir . \\
-        $args
+    gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" Mutect2 \
+        --input $tumor_bam \
+        --reference $ref_fasta \
+        --germline-resource $gnomad_vcf \
+        --germline-resource-index $gnomad_idx \
+        ${pon ? "--panel-of-normals $pon" : ""} \
+        ${pon_idx ? "--panel-of-normals-index $pon_idx" : ""} \
+        --tmp-dir . \
+        $extra_args \
+        --output ${tumor_bam.baseName}.vcf.gz
+
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
