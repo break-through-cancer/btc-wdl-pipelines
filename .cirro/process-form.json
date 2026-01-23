@@ -31,11 +31,6 @@
         "pathType": "dataset",
         "file": "**/*"
       },
-      "m2_extra_filtering_args": {
-        "title": "extra filtering args",
-        "description": "(optional) a string of additional command line arguments of the form \"-argument1 value1 -argument2 value2\" for Mutect 2 filtering. Most users will not need this",
-        "type": "string"
-      },
       "m2_extra_args": {
         "title": "extra args",
         "description": "(optional) a string of additional command line arguments of the form \"-argument1 value1 -argument2 value2\" for Mutect 2. Most users will not need this",

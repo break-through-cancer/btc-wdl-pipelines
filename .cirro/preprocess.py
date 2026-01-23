@@ -55,38 +55,38 @@ def yield_single_inputs(ds: PreprocessDataset):
                 f"{WORKFLOW_PREFIX}.normal_reads_index": normal_bai,
             }
 
-def yield_joint_inputs(ds: PreprocessDataset):
-    df = ds.files
-    for base_name, group in df.groupby("sample"):
-        if "PBMC" in base_name:
-            continue
-        tumor_bams = []
-        tumor_bais = []
-        normal_bams = []
-        normal_bais = []
+# def yield_joint_inputs(ds: PreprocessDataset):
+#     df = ds.files
+#     for base_name, group in df.groupby("sample"):
+#         if "PBMC" in base_name:
+#             continue
+#         tumor_bams = []
+#         tumor_bais = []
+#         normal_bams = []
+#         normal_bais = []
 
-        for f in group["file"]:
-            if f.endswith(".bam") and not f.endswith(".bam.bai"):
-                if "PBMC" in f or "normal" in f.lower():
-                    normal_bams.append(f)
-                else:
-                    tumor_bams.append(f)
-            elif f.endswith(".bam.bai"):
-                if "PBMC" in f or "normal" in f.lower():
-                    normal_bais.append(f)
-                else:
-                    tumor_bais.append(f)
+#         for f in group["file"]:
+#             if f.endswith(".bam") and not f.endswith(".bam.bai"):
+#                 if "PBMC" in f or "normal" in f.lower():
+#                     normal_bams.append(f)
+#                 else:
+#                     tumor_bams.append(f)
+#             elif f.endswith(".bam.bai"):
+#                 if "PBMC" in f or "normal" in f.lower():
+#                     normal_bais.append(f)
+#                 else:
+#                     tumor_bais.append(f)
 
-        inputs = {}
-        if tumor_bams and tumor_bais:
-            inputs[f"{WORKFLOW_PREFIX}.tumor_reads"] = tumor_bams
-            inputs[f"{WORKFLOW_PREFIX}.tumor_reads_index"] = tumor_bais
-        if normal_bams and normal_bais:
-            inputs[f"{WORKFLOW_PREFIX}.normal_reads"] = normal_bams
-            inputs[f"{WORKFLOW_PREFIX}.normal_reads_index"] = normal_bais
+#         inputs = {}
+#         if tumor_bams and tumor_bais:
+#             inputs[f"{WORKFLOW_PREFIX}.tumor_reads"] = tumor_bams
+#             inputs[f"{WORKFLOW_PREFIX}.tumor_reads_index"] = tumor_bais
+#         if normal_bams and normal_bais:
+#             inputs[f"{WORKFLOW_PREFIX}.normal_reads"] = normal_bams
+#             inputs[f"{WORKFLOW_PREFIX}.normal_reads_index"] = normal_bais
 
-        if inputs:
-            yield inputs
+#         if inputs:
+#             yield inputs
 
 def setup_inputs(ds: PreprocessDataset):
     # Load the process-input.json file if it exists
