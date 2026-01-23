@@ -1,0 +1,29 @@
+# ---- Test data (local only) ----
+test_data/
+test_data/**
+
+# ---- Nextflow runtime ----
+.nextflow/
+work/
+*.nextflow.log
+.nextflow.log*
+.nextflow/
+
+# ---- Temporary & cache files ----
+*.tmp
+*.swp
+.DS_Store
+
+# ---- Large genomics files (safety net) ----
+*.bam
+*.bai
+*.cram
+*.crai
+*.vcf
+*.vcf.gz
+*.tbi
+*.fasta
+*.fa
+*.fai
+*.dict
+
