@@ -66,22 +66,14 @@ process mutect_wrapper {
 }
 
 workflow {
-    tumor_bam       = file("test_data/tumor.bam")
-    tumor_bam_index = file("test_data/tumor.bam.bai")
-    ref_fasta       = file("test_data/ref.fa")
-    ref_fai         = file("test_data/ref.fa.fai")
-    ref_dict        = file("test_data/ref.dict")
-    gnomad_vcf      = file("test_data/gnomad.vcf.gz")
-    gnomad_idx      = file("test_data/gnomad.vcf.gz.tbi")
-
     mutect_wrapper(
-        tumor_bam,
-        tumor_bam_index,
-        ref_fasta,
-        ref_fai,
-        ref_dict,
-        gnomad_vcf,
-        gnomad_idx,
-        params.extra_args ?: ''
-    )
+    file(params.tumor_reads),
+    file(params.tumor_reads_index),
+    file(params.ref_fasta),
+    file(params.ref_fai),
+    file(params.ref_dict),
+    file(params.gnomad),
+    file(params.gnomad_idx),
+    params.m2_extra_args
+  )
 }
