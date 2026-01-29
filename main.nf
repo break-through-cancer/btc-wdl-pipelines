@@ -13,7 +13,7 @@ process mutect_wrapper {
     path ref_dict
     path gnomad_vcf
     path gnomad_idx
-    val extra_args from params.m2_extra_args ?: ''
+    val extra_args = (params.m2_extra_args ?: '')
 
 
 
