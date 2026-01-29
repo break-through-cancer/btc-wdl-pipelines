@@ -32,13 +32,12 @@ process mutect_wrapper {
     } else {
         avail_mem = (task.memory.mega*0.8).intValue()
     }
+
     """
     gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" Mutect2 \
         --input $tumor_bam \
         --reference $ref_fasta \
         --germline-resource $gnomad_vcf \
-        --germline-resource-index $gnomad_idx \
-        
         --tmp-dir . \
         $extra_args \
         --output ${tumor_bam.baseName}.vcf.gz

@@ -37,8 +37,6 @@ process mutect_wrapper {
         --input $tumor_bam \
         --reference $ref_fasta \
         --germline-resource $gnomad_vcf \
-        --germline-resource-index $gnomad_idx \
-        
         --tmp-dir . \
         $extra_args \
         --output ${tumor_bam.baseName}.vcf.gz
@@ -68,11 +66,11 @@ process mutect_wrapper {
 workflow {
     tumor_bam       = file("test_data/tumor.bam")
     tumor_bam_index = file("test_data/tumor.bam.bai")
-    ref_fasta       = file("test_data/ref.fa")
-    ref_fai         = file("test_data/ref.fa.fai")
+    ref_fasta       = file("test_data/ref.fasta")
+    ref_fai         = file("test_data/ref.fasta.fai")
     ref_dict        = file("test_data/ref.dict")
-    gnomad_vcf      = file("test_data/gnomad.vcf.gz")
-    gnomad_idx      = file("test_data/gnomad.vcf.gz.tbi")
+    gnomad_vcf      = file("test_data/gnomad.v3.1.2.sites.chr20.vcf.bgz")
+    gnomad_idx      = file("test_data/gnomad.v3.1.2.sites.chr20.vcf.bgz.tbi")
 
     mutect_wrapper(
         tumor_bam,
