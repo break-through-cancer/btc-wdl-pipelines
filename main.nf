@@ -65,7 +65,7 @@ process mutect_wrapper {
         --reference $ref_fasta \
         --germline-resource $gnomad_vcf \
         --tmp-dir . \
-        --tumor-sample "$tumor_sample" \
+        --tumor-sample "\$tumor_sample" \
         $extra_args \
         --output ${tumor_bam.baseName}.vcf.gz
 
