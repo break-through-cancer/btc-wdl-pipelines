@@ -26,6 +26,7 @@ process mutect_wrapper {
     path "*.f1r2.tar.gz", optional: true, emit: f1r2
     path "versions.yml", emit: versions
 
+
     script:
     
     def avail_mem = 3072
@@ -35,12 +36,36 @@ process mutect_wrapper {
         avail_mem = (task.memory.mega*0.8).intValue()
     }
 
+    
+
+
     """
+
+    set -euo pipefail
+
+    tumor_sample=\$(samtools view -H "$tumor_bam" | awk -F'\\t' '
+      /^@RG/ { for (i=1;i<=NF;i++) if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i } }
+    ' | sort -u)
+
+    if [ -z "\$tumor_sample" ]; then
+      echo "ERROR: No SM tag found in BAM header" >&2
+      exit 1
+    fi
+
+    if [ \$(echo "\$tumor_sample" | wc -l) -ne 1 ]; then
+      echo "ERROR: Multiple SM values found in BAM header:" >&2
+      echo "\$tumor_sample" >&2
+      exit 1
+    fi
+
+    echo "Detected tumor sample: \$tumor_sample"
+    
     gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" Mutect2 \
         --input $tumor_bam \
         --reference $ref_fasta \
         --germline-resource $gnomad_vcf \
         --tmp-dir . \
+        --tumor-sample "$tumor_sample" \
         $extra_args \
         --output ${tumor_bam.baseName}.vcf.gz
 
