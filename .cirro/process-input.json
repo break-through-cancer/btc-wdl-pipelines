@@ -9,7 +9,7 @@
     "scatter_count": "$.dataset.params.scatter_count",
     "tumor_reads": "$.dataset.params.tumor_reads",
     "tumor_reads_index": "$.dataset.params.tumor_reads_index",
-    "m2_extra_args": "$.dataset.params.m2_extra_args",
+    "extra_args": "$.dataset.params.m2_extra_args",
     "cpu": "$.dataset.params.cpu",
     "mem": "$.dataset.params.mem",
     "gatk_docker": "broadinstitute/gatk:4.0.11.0",
