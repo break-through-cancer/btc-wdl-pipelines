@@ -13,8 +13,7 @@ process mutect_wrapper {
     path ref_fasta
     path ref_fai
     path ref_dict
-    path gnomad_vcf
-    path gnomad_idx
+    path germline_resource
     val extra_args
 
 
@@ -63,7 +62,7 @@ process mutect_wrapper {
     gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" Mutect2 \
         --input $tumor_bam \
         --reference $ref_fasta \
-        --germline-resource $gnomad_vcf \
+        --germline-resource $germline_resource \
         --tmp-dir . \
         --tumor-sample "\$tumor_sample" \
         $extra_args \
@@ -98,8 +97,7 @@ workflow {
     file(params.ref_fasta),
     file(params.ref_fai),
     file(params.ref_dict),
-    file(params.gnomad),
-    file(params.gnomad_idx),
+    file(params.germline_resource),
     params.m2_extra_args
   )
 }
