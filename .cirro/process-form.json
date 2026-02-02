@@ -31,7 +31,7 @@
         "pathType": "dataset",
         "file": "**/*"
       },
-      "germline-resource": {
+      "germline_resource": {
         "title": "germline resource",
         "description": "",
         "type": "string",
