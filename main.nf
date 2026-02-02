@@ -14,6 +14,7 @@ process mutect_wrapper {
     path ref_fai
     path ref_dict
     path germline_resource
+    path intervals
     val extra_args
 
 
@@ -63,6 +64,7 @@ process mutect_wrapper {
         --input $tumor_bam \
         --reference $ref_fasta \
         --germline-resource $germline_resource \
+        --intervals $intervals \
         --tmp-dir . \
         --tumor-sample "\$tumor_sample" \
         $extra_args \
@@ -98,6 +100,7 @@ workflow {
     file(params.ref_fai),
     file(params.ref_dict),
     file(params.germline_resource),
+    file(params.intervals),
     params.m2_extra_args
   )
 }
