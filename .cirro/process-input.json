@@ -13,7 +13,7 @@
     "cpu": "$.dataset.params.cpu",
     "mem": "$.dataset.params.mem",
     "gatk_docker": "broadinstitute/gatk:4.0.11.0",
-    "gnomad": "$.dataset.params.germline_resource",
+    "germline_resource": "$.dataset.params.germline_resource",
     "gnomad_version": "2.1",
     "minimum_allele_frequency": "0.0",
     "mem_gb": "128",
