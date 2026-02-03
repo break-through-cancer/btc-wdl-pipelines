@@ -63,7 +63,7 @@ process mutect_wrapper {
     # Ensure germline resource is indexed
     if [ ! -f "${germline_resource}.tbi" ]; then
       echo "Index missing for germline resource; creating with IndexFeatureFile..."
-      gatk IndexFeatureFile -I "$germline_resource"
+      gatk IndexFeatureFile -F "$germline_resource"
     fi
 
     gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" Mutect2 \
