@@ -1,4 +1,6 @@
 params.m2_extra_args = params.m2_extra_args ?: ''
+JAVA_MEM=${avail_mem}
+sample=$(basename "$tumor_bam" .bam)
 
 process split_intervals {
   label 'process_medium'
@@ -63,9 +65,7 @@ process mutect_wrapper {
     }
 
     
-
-
-    """
+    '''
 
     set -euo pipefail
 
@@ -94,7 +94,7 @@ process mutect_wrapper {
 
     shard_id=$(basename "$interval_shard" | sed 's/\.interval_list$//')
 
-    gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" Mutect2 \
+    gatk --java-options "-Xmx${JAVA_MEM}M -XX:-UsePerfData" Mutect2 \
         --input $tumor_bam \
         --reference $ref_fasta \
         --germline-resource $germline_resource \
@@ -102,14 +102,14 @@ process mutect_wrapper {
         --tmp-dir . \
         --tumor-sample "\$tumor_sample" \
         $extra_args \
-        --output ${tumor_bam.baseName}.${shard_id}.vcf.gz
+        --output "${sample}.${shard_id}.vcf.gz"
 
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         gatk4: \$(echo \$(gatk --version 2>&1) | sed 's/^.*(GATK) v//; s/ .*\$//')
     END_VERSIONS
-    """
+    '''
 
    stub:
     """
