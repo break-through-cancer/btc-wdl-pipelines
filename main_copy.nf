@@ -1,31 +1,5 @@
 params.m2_extra_args = params.m2_extra_args ?: ''
 
-process split_intervals {
-  label 'process_medium'
-  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
-
-  input:
-    path ref_fasta
-    path intervals
-    val scatter_count
-
-  output:
-    path "scattered/*.interval_list", emit: shards
-
-  script:
-  """
-  set -euo pipefail
-  mkdir -p scattered
-
-  gatk SplitIntervals \
-    -R ${ref_fasta} \
-    -L ${intervals} \
-    --scatter ${scatter_count} \
-    -O scattered
-  """
-}
-
-
 process mutect_wrapper {
     //tag "$meta.id"
     label 'process_medium'
@@ -40,7 +14,7 @@ process mutect_wrapper {
     path ref_fai
     path ref_dict
     path germline_resource
-    path interval_shard
+    path intervals
     val extra_args
 
 
@@ -96,11 +70,11 @@ process mutect_wrapper {
         --input $tumor_bam \
         --reference $ref_fasta \
         --germline-resource $germline_resource \
-        --intervals $interval_shard \
+        --intervals $intervals \
         --tmp-dir . \
         --tumor-sample "\$tumor_sample" \
         $extra_args \
-        --output ${tumor_bam.baseName}.${shard_id}.vcf.gz
+        --output ${tumor_bam.baseName}.vcf.gz
 
 
     cat <<-END_VERSIONS > versions.yml
@@ -124,46 +98,15 @@ process mutect_wrapper {
 
 }
 
-process gather_vcfs {
-  label 'process_medium'
-  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
-
-  input:
-    path vcfs
-
-  output:
-    path "merged.vcf.gz"
-    path "merged.vcf.gz.tbi"
-
-  script:
-  """
-  set -euo pipefail
-  gatk GatherVcfs \\
-    ${vcfs.collect{ "-I ${it}" }.join(' ')} \\
-    -O merged.vcf.gz
-  """
-}
-
-
 workflow {
-
-  shards_ch = split_intervals(
-    file(params.ref_fasta),
-    file(params.intervals),
-    params.scatter_count as int
-  ).shards
-
-  mutect_res = mutect_wrapper(
+    mutect_wrapper(
     file(params.tumor_reads),
     file(params.tumor_reads_index),
     file(params.ref_fasta),
     file(params.ref_fai),
     file(params.ref_dict),
     file(params.germline_resource),
-    shards_ch,
+    file(params.intervals),
     params.m2_extra_args
   )
-
-  gather_vcfs(mutect_res.vcf.collect())
-
 }
