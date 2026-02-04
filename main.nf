@@ -92,6 +92,8 @@ process mutect_wrapper {
       gatk IndexFeatureFile -F "$germline_resource"
     fi
 
+    shard_id=$(basename "$interval_shard" | sed 's/\.interval_list$//')
+
     gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" Mutect2 \
         --input $tumor_bam \
         --reference $ref_fasta \
