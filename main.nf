@@ -28,95 +28,65 @@ process split_intervals {
 }
 
 
-process mutect_wrapper {
-  label 'process_medium'
-  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+script {
+  def avail_mem = task.memory ? (task.memory.mega * 0.8).intValue() : 3072
 
-  input:
-    path tumor_bam
-    path tumor_bam_index
-    path ref_fasta
-    path ref_fai
-    path ref_dict
-    path germline_resource
-    path interval_shard
-    val  extra_args
+  """
+  set -euo pipefail
 
-  output:
-    path "*.vcf.gz",      emit: vcf
-    path "*.vcf.gz.tbi",  emit: tbi
-    path "*.stats",       emit: stats
-    path "*.f1r2.tar.gz", optional: true, emit: f1r2
-    path "versions.yml",  emit: versions
+  export AVAIL_MEM=${avail_mem}
+  export EXTRA_ARGS="${extra_args}"
 
-  script {
-    // Compute JVM heap (MB) in Groovy
-    def avail_mem = 3072
-    if (!task.memory) {
-      log.info '[GATK Mutect2] task.memory not set - defaulting to 3GB heap'
-    } else {
-      avail_mem = (task.memory.mega * 0.8).intValue()
-    }
-
-    """
+  bash -lc '
     set -euo pipefail
 
-    tumor_sample=\\$(samtools view -H "$tumor_bam" | awk -F'\\t' '
-      /^@RG/ { for (i=1;i<=NF;i++) if (\\$i ~ /^SM:/) { sub(/^SM:/,"",\\$i); print \\$i } }
-    ' | sort -u)
+    tumor_sample=$(samtools view -H "$tumor_bam" | awk -F"\\t" "
+      /^@RG/ {
+        for (i=1;i<=NF;i++)
+          if (\\$i ~ /^SM:/) { sub(/^SM:/,\\\"\\\",\\$i); print \\$i }
+      }
+    " | sort -u)
 
-    if [ -z "\\$tumor_sample" ]; then
+    if [ -z "$tumor_sample" ]; then
       echo "ERROR: No SM tag found in BAM header" >&2
       exit 1
     fi
 
-    if [ \\$(echo "\\$tumor_sample" | wc -l) -ne 1 ]; then
+    if [ $(echo "$tumor_sample" | wc -l) -ne 1 ]; then
       echo "ERROR: Multiple SM values found in BAM header:" >&2
-      echo "\\$tumor_sample" >&2
+      echo "$tumor_sample" >&2
       exit 1
     fi
 
-    echo "Detected tumor sample: \\$tumor_sample"
+    echo "Detected tumor sample: $tumor_sample"
 
-    # Ensure germline resource is indexed
     if [ ! -f "${germline_resource}.tbi" ]; then
       echo "Index missing for germline resource; creating with IndexFeatureFile..."
       gatk IndexFeatureFile -F "$germline_resource"
     fi
 
-    shard_id=\\$(basename "$interval_shard" | sed 's/\\.interval_list\\$//')
-    sample=\\$(basename "$tumor_bam" .bam)
+    shard_id=$(basename "$interval_shard" | sed "s/\\.interval_list$//")
+    sample=$(basename "$tumor_bam" .bam)
 
-    gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" Mutect2 \\
-      --input "$tumor_bam" \\
-      --reference "$ref_fasta" \\
-      --germline-resource "$germline_resource" \\
-      --intervals "$interval_shard" \\
-      --tmp-dir . \\
-      --tumor-sample "\\$tumor_sample" \\
-      $extra_args \\
-      --output "\\${sample}.\\${shard_id}.vcf.gz"
+    # run mutect
+    gatk --java-options "-Xmx${AVAIL_MEM}M -XX:-UsePerfData" Mutect2 \
+      --input "$tumor_bam" \
+      --reference "$ref_fasta" \
+      --germline-resource "$germline_resource" \
+      --intervals "$interval_shard" \
+      --tmp-dir . \
+      --tumor-sample "$tumor_sample" \
+      $EXTRA_ARGS \
+      --output "${sample}.${shard_id}.vcf.gz"
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        gatk4: \\$(echo \\$(gatk --version 2>&1) | sed 's/^.*(GATK) v//; s/ .*\\$//')
+        gatk4: $(echo $(gatk --version 2>&1) | sed "s/^.*(GATK) v//; s/ .*\\$//")
     END_VERSIONS
-    """
-  }
-
-  stub:
-  """
-  touch ${tumor_bam.baseName}.vcf.gz
-  touch ${tumor_bam.baseName}.vcf.gz.tbi
-  touch ${tumor_bam.baseName}.vcf.gz.stats
-  touch ${tumor_bam.baseName}.f1r2.tar.gz
-
-  cat <<-END_VERSIONS > versions.yml
-  "${task.process}":
-      gatk4: stub
-  END_VERSIONS
+  '
   """
 }
+
 
 
 process gather_vcfs {
