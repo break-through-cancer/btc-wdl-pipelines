@@ -28,7 +28,28 @@ process split_intervals {
 }
 
 
-script {
+process mutect_wrapper {
+  label 'process_medium'
+  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+
+  input:
+    path tumor_bam
+    path tumor_bam_index
+    path ref_fasta
+    path ref_fai
+    path ref_dict
+    path germline_resource
+    path interval_shard
+    val  extra_args
+
+  output:
+    path "*.vcf.gz",      emit: vcf
+    path "*.vcf.gz.tbi",  emit: tbi
+    path "*.stats",       emit: stats
+    path "*.f1r2.tar.gz", optional: true, emit: f1r2
+    path "versions.yml",  emit: versions
+
+  script {
   def avail_mem = task.memory ? (task.memory.mega * 0.8).intValue() : 3072
 
   """
@@ -85,8 +106,22 @@ script {
     END_VERSIONS
   '
   """
-}
+  }
 
+
+  stub:
+  """
+  touch ${tumor_bam.baseName}.vcf.gz
+  touch ${tumor_bam.baseName}.vcf.gz.tbi
+  touch ${tumor_bam.baseName}.vcf.gz.stats
+  touch ${tumor_bam.baseName}.f1r2.tar.gz
+
+  cat <<-END_VERSIONS > versions.yml
+  "${task.process}":
+      gatk4: stub
+  END_VERSIONS
+  """
+}
 
 
 process gather_vcfs {
