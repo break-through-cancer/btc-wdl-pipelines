@@ -61,19 +61,19 @@ process mutect_wrapper {
   bash -lc '
     set -euo pipefail
 
-    tumor_sample=$(samtools view -H "$tumor_bam" | awk -F"\\t" "
+    tumor_sample=`samtools view -H "$tumor_bam" | awk -F"\t" '
       /^@RG/ {
         for (i=1;i<=NF;i++)
-          if (\\$i ~ /^SM:/) { sub(/^SM:/,\\\"\\\",\\$i); print \\$i }
+          if ($i ~ /^SM:/) { sub(/^SM:/,"",$i); print $i }
       }
-    " | sort -u)
+    ' | sort -u`
 
     if [ -z "$tumor_sample" ]; then
       echo "ERROR: No SM tag found in BAM header" >&2
       exit 1
     fi
 
-    if [ $(echo "$tumor_sample" | wc -l) -ne 1 ]; then
+    if [ `echo "$tumor_sample" | wc -l` -ne 1 ]; then
       echo "ERROR: Multiple SM values found in BAM header:" >&2
       echo "$tumor_sample" >&2
       exit 1
@@ -82,14 +82,12 @@ process mutect_wrapper {
     echo "Detected tumor sample: $tumor_sample"
 
     if [ ! -f "${germline_resource}.tbi" ]; then
-      echo "Index missing for germline resource; creating with IndexFeatureFile..."
       gatk IndexFeatureFile -F "$germline_resource"
     fi
 
-    shard_id=$(basename "$interval_shard" | sed "s/\\.interval_list$//")
-    sample=$(basename "$tumor_bam" .bam)
+    shard_id=`basename "$interval_shard" | sed "s/\\.interval_list$//"`
+    sample=`basename "$tumor_bam" .bam`
 
-    # run mutect
     gatk --java-options "-Xmx${AVAIL_MEM}M -XX:-UsePerfData" Mutect2 \
       --input "$tumor_bam" \
       --reference "$ref_fasta" \
@@ -102,11 +100,12 @@ process mutect_wrapper {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        gatk4: $(echo $(gatk --version 2>&1) | sed "s/^.*(GATK) v//; s/ .*\\$//")
+        gatk4: `gatk --version 2>&1 | sed "s/^.*(GATK) v//; s/ .*\\$//"`
     END_VERSIONS
   '
   """
   }
+
 
 
   stub:
