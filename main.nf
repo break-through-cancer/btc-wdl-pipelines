@@ -6,7 +6,7 @@ process split_intervals {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
-input:
+  input:
     path ref_fasta
     path ref_fai
     path ref_dict
@@ -18,17 +18,24 @@ input:
 
   script:
   """
-  set -euo pipefail
+  set -eo pipefail
   mkdir -p scattered
 
+  gatk BedToIntervalList \
+    -I "$intervals" \
+    -SD "$ref_dict" \
+    -O regions.interval_list
 
   gatk SplitIntervals \
-    -R ${ref_fasta} \
-    -L ${intervals} \
-    --scatter ${scatter_count} \
+    -R "$ref_fasta" \
+    -L regions.interval_list \
+    --scatter "$scatter_count" \
     -O scattered
+
+  ls -lah scattered
   """
 }
+
 
 
 process mutect_wrapper {
