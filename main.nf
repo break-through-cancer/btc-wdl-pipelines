@@ -21,9 +21,6 @@ input:
   set -euo pipefail
   mkdir -p scattered
 
-  # GATK expects the .fai to sit next to the fasta with the same basename
-  ln -sf "$ref_fai" "\$(basename "$ref_fasta").fai" || true
-  ln -sf "$ref_dict" "\$(basename "$ref_fasta" .fasta).dict"
 
   gatk SplitIntervals \
     -R ${ref_fasta} \
