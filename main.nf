@@ -49,7 +49,7 @@ process mutect_wrapper {
     path "*.f1r2.tar.gz", optional: true, emit: f1r2
     path "versions.yml",  emit: versions
 
-  script {
+  script:
   def avail_mem = task.memory ? (task.memory.mega * 0.8).intValue() : 3072
 
   """
@@ -91,7 +91,6 @@ process mutect_wrapper {
   # Record versions
   gatk --version > versions.yml 2>&1
   """
-}
 
 
   stub:
