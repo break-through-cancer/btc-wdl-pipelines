@@ -55,57 +55,43 @@ process mutect_wrapper {
   """
   set -euo pipefail
 
-  export AVAIL_MEM=${avail_mem}
-  export EXTRA_ARGS="${extra_args}"
+  # Get unique SM tag from BAM header (no nested quoting issues)
+  tumor_sample=\$(samtools view -H "$tumor_bam" \
+    | awk -F'\\t' '/^@RG/ { for (i=1;i<=NF;i++) if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i } }' \
+    | sort -u)
 
-  bash -lc '
-    set -euo pipefail
+  if [ -z "\$tumor_sample" ]; then
+    echo "ERROR: No SM tag found in BAM header" >&2
+    exit 1
+  fi
 
-    tumor_sample=`samtools view -H "$tumor_bam" | awk -F"\t" '
-      /^@RG/ {
-        for (i=1;i<=NF;i++)
-          if ($i ~ /^SM:/) { sub(/^SM:/,"",$i); print $i }
-      }
-    ' | sort -u`
+  if [ \$(echo "\$tumor_sample" | wc -l) -ne 1 ]; then
+    echo "ERROR: Multiple SM values found in BAM header:" >&2
+    echo "\$tumor_sample" >&2
+    exit 1
+  fi
 
-    if [ -z "$tumor_sample" ]; then
-      echo "ERROR: No SM tag found in BAM header" >&2
-      exit 1
-    fi
+  echo "Detected tumor sample: \$tumor_sample"
 
-    if [ `echo "$tumor_sample" | wc -l` -ne 1 ]; then
-      echo "ERROR: Multiple SM values found in BAM header:" >&2
-      echo "$tumor_sample" >&2
-      exit 1
-    fi
+  # Ensure germline resource is indexed
+  if [ ! -f "${germline_resource}.tbi" ]; then
+    gatk IndexFeatureFile -F "$germline_resource"
+  fi
 
-    echo "Detected tumor sample: $tumor_sample"
+  gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" Mutect2 \\
+    --input "$tumor_bam" \\
+    --reference "$ref_fasta" \\
+    --germline-resource "$germline_resource" \\
+    --intervals "$interval_shard" \\
+    --tmp-dir . \\
+    --tumor-sample "\$tumor_sample" \\
+    ${extra_args} \\
+    --output out.vcf.gz
 
-    if [ ! -f "${germline_resource}.tbi" ]; then
-      gatk IndexFeatureFile -F "$germline_resource"
-    fi
-
-    shard_id=`basename "$interval_shard" | sed "s/\\.interval_list$//"`
-    sample=`basename "$tumor_bam" .bam`
-
-    gatk --java-options "-Xmx${AVAIL_MEM}M -XX:-UsePerfData" Mutect2 \
-      --input "$tumor_bam" \
-      --reference "$ref_fasta" \
-      --germline-resource "$germline_resource" \
-      --intervals "$interval_shard" \
-      --tmp-dir . \
-      --tumor-sample "$tumor_sample" \
-      $EXTRA_ARGS \
-      --output "${sample}.${shard_id}.vcf.gz"
-
-    cat <<-END_VERSIONS > versions.yml
-    "${task.process}":
-        gatk4: `gatk --version 2>&1 | sed "s/^.*(GATK) v//; s/ .*\\$//"`
-    END_VERSIONS
-  '
+  # Record versions
+  gatk --version > versions.yml 2>&1
   """
-  }
-
+}
 
 
   stub:
