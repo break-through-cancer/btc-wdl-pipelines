@@ -6,8 +6,9 @@ process split_intervals {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
-  input:
+input:
     path ref_fasta
+    path ref_fai
     path intervals
     val scatter_count
 
@@ -18,6 +19,9 @@ process split_intervals {
   """
   set -euo pipefail
   mkdir -p scattered
+
+  # GATK expects the .fai to sit next to the fasta with the same basename
+  ln -sf "$ref_fai" "\$(basename "$ref_fasta").fai" || true
 
   gatk SplitIntervals \
     -R ${ref_fasta} \
@@ -133,6 +137,7 @@ workflow {
 
   shards_ch = split_intervals(
     file(params.ref_fasta),
+    file(params.ref_fai),
     file(params.intervals),
     params.scatter_count as int
   ).shards
