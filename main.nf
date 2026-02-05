@@ -9,6 +9,7 @@ process split_intervals {
 input:
     path ref_fasta
     path ref_fai
+    path ref_dict
     path intervals
     val scatter_count
 
@@ -22,6 +23,7 @@ input:
 
   # GATK expects the .fai to sit next to the fasta with the same basename
   ln -sf "$ref_fai" "\$(basename "$ref_fasta").fai" || true
+  ln -sf "$ref_dict" "\$(basename "$ref_fasta" .fasta).dict"
 
   gatk SplitIntervals \
     -R ${ref_fasta} \
@@ -138,6 +140,7 @@ workflow {
   shards_ch = split_intervals(
     file(params.ref_fasta),
     file(params.ref_fai),
+    file(params.ref_dict),
     file(params.intervals),
     params.scatter_count as int
   ).shards
