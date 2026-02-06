@@ -151,7 +151,7 @@ workflow {
     file(params.ref_dict),
     file(params.intervals),
     params.scatter_count as int
-  ).shards
+  ).shards.flatten()
 
   mutect_inputs = shards_ch.map { shard ->
     tuple(
