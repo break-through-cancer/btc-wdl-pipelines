@@ -21,12 +21,12 @@ process split_intervals {
   set -eo pipefail
   mkdir -p scattered
 
-  gatk BedToIntervalList \
+  gatk --java-options "-Xmx8g -XX:-UsePerfData" BedToIntervalList \
     -I "$intervals" \
     -SD "$ref_dict" \
     -O regions.interval_list
 
-  gatk SplitIntervals \
+  gatk --java-options "-Xmx8g -XX:-UsePerfData" SplitIntervals \
     -R "$ref_fasta" \
     -L regions.interval_list \
     --scatter "$scatter_count" \
