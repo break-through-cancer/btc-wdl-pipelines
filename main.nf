@@ -43,12 +43,14 @@ process mutect_wrapper {
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-    tuple path(tumor_bam), path(tumor_bam_index), path(interval_shard)
-    path ref_fasta
-    path ref_fai
-    path ref_dict
-    path germline_resource
-    val  extra_args
+    tuple path(tumor_bam),
+          path(tumor_bam_index),
+          path(interval_shard),
+          path(ref_fasta),
+          path(ref_fai),
+          path(ref_dict),
+          path(germline_resource)
+    val extra_args
 
   output:
     path "*.vcf.gz",      emit: vcf
@@ -151,23 +153,25 @@ workflow {
     params.scatter_count as int
   ).shards
 
-  tumor_triplets = shards_ch.map { shard ->
+  mutect_inputs = shards_ch.map { shard ->
     tuple(
       file(params.tumor_reads),
       file(params.tumor_reads_index),
-      shard
+      shard,
+      file(params.ref_fasta),
+      file(params.ref_fai),
+      file(params.ref_dict),
+      file(params.germline_resource)
     )
-  }
+}
 
-  mutect_res = mutect_wrapper(
-    tumor_triplets,
-    file(params.ref_fasta),
-    file(params.ref_fai),
-    file(params.ref_dict),
-    file(params.germline_resource),
-    params.m2_extra_args
-  )
 
-  gather_vcfs(mutect_res.vcf.collect())
+mutect_res = mutect_wrapper(
+  mutect_inputs,
+  params.m2_extra_args
+)
+
+
+gather_vcfs(mutect_res.vcf.collect())
 
 }
