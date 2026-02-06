@@ -43,13 +43,11 @@ process mutect_wrapper {
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-    path tumor_bam
-    path tumor_bam_index
+    tuple path(tumor_bam), path(tumor_bam_index), path(interval_shard)
     path ref_fasta
     path ref_fai
     path ref_dict
     path germline_resource
-    path interval_shard
     val  extra_args
 
   output:
@@ -60,9 +58,13 @@ process mutect_wrapper {
     path "versions.yml",  emit: versions
 
   script:
+  
   def avail_mem = task.memory ? (task.memory.mega * 0.8).intValue() : 3072
 
   """
+  echo "INTERVAL_SHARD=$interval_shard"
+  ls -lah
+
   set -euo pipefail
 
   # Get unique SM tag from BAM header (no nested quoting issues)
@@ -149,14 +151,22 @@ workflow {
     params.scatter_count as int
   ).shards
 
+  shards_ch = split_intervals(...).shards
+
+  tumor_triplets = shards_ch.map { shard ->
+    tuple(
+      file(params.tumor_reads),
+      file(params.tumor_reads_index),
+      shard
+    )
+  }
+
   mutect_res = mutect_wrapper(
-    file(params.tumor_reads),
-    file(params.tumor_reads_index),
+    tumor_triplets,
     file(params.ref_fasta),
     file(params.ref_fai),
     file(params.ref_dict),
     file(params.germline_resource),
-    shards_ch,
     params.m2_extra_args
   )
 
