@@ -151,8 +151,6 @@ workflow {
     params.scatter_count as int
   ).shards
 
-  shards_ch = split_intervals(...).shards
-
   tumor_triplets = shards_ch.map { shard ->
     tuple(
       file(params.tumor_reads),
