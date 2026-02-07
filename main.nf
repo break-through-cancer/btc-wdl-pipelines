@@ -55,14 +55,14 @@ process mutect_wrapper {
   output:
     path "*.vcf.gz",      emit: vcf
     path "*.vcf.gz.tbi",  emit: tbi
-    path "*.stats",       emit: stats
+    path "*.stats", optional: true, emit: stats
     path "*.f1r2.tar.gz", optional: true, emit: f1r2
     path "versions.yml",  emit: versions
 
   script:
   
   def avail_mem = task.memory ? (task.memory.mega * 0.8).intValue() : 3072
-
+  def heap_mb   = Math.min(avail_mem, 24000)   // cap at 24 GB
   """
   echo "INTERVAL_SHARD=$interval_shard"
   ls -lah
@@ -92,7 +92,7 @@ process mutect_wrapper {
     gatk IndexFeatureFile -F "$germline_resource"
   fi
 
-  gatk --java-options "-Xmx${avail_mem}M -XX:-UsePerfData" Mutect2 \\
+  gatk --java-options "-Xmx${heap_mb}M -XX:-UsePerfData" Mutect2 \\
     --input "$tumor_bam" \\
     --reference "$ref_fasta" \\
     --germline-resource "$germline_resource" \\
