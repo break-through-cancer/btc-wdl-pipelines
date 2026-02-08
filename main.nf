@@ -241,7 +241,7 @@ workflow {
     file(params.ref_dict),
     file(params.intervals),
     params.scatter_count as int
-  ).shards.flatten
+  ).shards.flatten()
 
   // Pair each shard with shared inputs so mutect runs once per shard
   mutect_inputs = shards_ch.map { shard ->
