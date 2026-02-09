@@ -88,7 +88,7 @@ process mutect_wrapper {
     path "*.vcf.gz.tbi",  emit: tbi
     path "*.stats",       optional: true, emit: stats
     path "*.f1r2.tar.gz", optional: true, emit: f1r2
-    path "versions.yml",  emit: versions
+    path "versions.yml", optional: true, emit: versions
 
   script:
   def avail_mem = task.memory ? (task.memory.mega * 0.8).intValue() : 3072
@@ -161,8 +161,9 @@ process mutect_wrapper {
   ls -lah "\${out_prefix}.vcf.gz" "\${out_prefix}.vcf.gz.tbi" 2>/dev/null || true
 
   echo "=== mutect_wrapper: versions.yml ==="
-  gatk --version > versions.yml 2>&1
+  ( gatk --version > versions.yml 2>&1 || echo "gatk --version failed (non-fatal)" > versions.yml )
   cat versions.yml || true
+
 
   echo "=== mutect_wrapper: END ==="
   """
@@ -260,6 +261,9 @@ workflow {
     mutect_inputs,
     params.m2_extra_args
   )
+
+  mutect_res.vcf.view { "VCF: $it" }
+
 
   gather_vcfs(mutect_res.vcf.collect())
 }
