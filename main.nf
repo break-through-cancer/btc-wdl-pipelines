@@ -256,13 +256,20 @@ process gather_vcfs {
   cat vcfs.sorted.list
 
   echo "=== gather_vcfs: run GatherVcfs in sorted order ==="
-  gatk GatherVcfs \\
-    \$(while read -r f; do echo -n " -I \$f"; done < vcfs.sorted.list) \\
+  gatk GatherVcfs \
+    $(while read -r f; do echo -n " -I $f"; done < vcfs.sorted.list) \
     -O merged.vcf.gz
 
+  echo "=== gather_vcfs: index merged VCF ==="
+  # Prefer GATK indexer; fall back to tabix if available
+  gatk IndexFeatureFile -I merged.vcf.gz || tabix -p vcf merged.vcf.gz
+
+  # Hard-fail if index still missing (so Nextflow error is clearer)
+  test -s merged.vcf.gz.tbi
+
   echo "=== gather_vcfs: outputs ==="
-  ls -lah merged.vcf.gz merged.vcf.gz.tbi || true
-  echo "=== gather_vcfs: END ==="
+  ls -lah merged.vcf.gz merged.vcf.gz.tbi
+
   """
 }
 
