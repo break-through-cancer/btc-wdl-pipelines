@@ -193,6 +193,39 @@ process mutect_wrapper {
  *   - Collect per-shard VCFs
  * --------------------------------------------
  */
+// process gather_vcfs {
+//   label 'process_medium'
+//   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+
+//   input:
+//     path vcfs
+
+//   output:
+//     path "merged.vcf.gz"
+//     path "merged.vcf.gz.tbi"
+
+//   script:
+//   """
+//   set -euo pipefail
+//   echo "=== gather_vcfs: START ==="
+//   echo "PWD=\$(pwd)"
+//   echo "Inputs:"
+//   ls -lah
+
+//   echo "VCF list received by process:"
+//   for f in ${vcfs}; do
+//     echo " - \$f"
+//   done
+
+//   gatk GatherVcfs \\
+//     ${vcfs.collect{ "-I ${it}" }.join(' ')} \\
+//     -O merged.vcf.gz
+
+//   echo "=== gather_vcfs: outputs ==="
+//   ls -lah merged.vcf.gz merged.vcf.gz.tbi || true
+//   echo "=== gather_vcfs: END ==="
+//   """
+// }
 process gather_vcfs {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
@@ -212,13 +245,19 @@ process gather_vcfs {
   echo "Inputs:"
   ls -lah
 
-  echo "VCF list received by process:"
-  for f in ${vcfs}; do
-    echo " - \$f"
-  done
+  echo "=== gather_vcfs: files we will gather (unsorted) ==="
+  printf "%s\\n" ${vcfs} > vcfs.list
+  cat vcfs.list
 
+  echo "=== gather_vcfs: sort by shard number in filename ==="
+  # Filenames look like: out.0000-scattered.vcf.gz
+  # Sort key: the 2nd '.'-delimited field (0000-scattered...), numeric sort works because it starts with digits
+  sort -t. -k2,2n vcfs.list > vcfs.sorted.list
+  cat vcfs.sorted.list
+
+  echo "=== gather_vcfs: run GatherVcfs in sorted order ==="
   gatk GatherVcfs \\
-    ${vcfs.collect{ "-I ${it}" }.join(' ')} \\
+    \$(while read -r f; do echo -n " -I \$f"; done < vcfs.sorted.list) \\
     -O merged.vcf.gz
 
   echo "=== gather_vcfs: outputs ==="
