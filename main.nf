@@ -250,28 +250,26 @@ process gather_vcfs {
   cat vcfs.list
 
   echo "=== gather_vcfs: sort by shard number in filename ==="
-  # Filenames look like: out.0000-scattered.vcf.gz
-  # Sort key: the 2nd '.'-delimited field (0000-scattered...), numeric sort works because it starts with digits
   sort -t. -k2,2n vcfs.list > vcfs.sorted.list
   cat vcfs.sorted.list
 
+  echo "=== gather_vcfs: build args file (-I per line) ==="
+  awk '{print "-I",$0}' vcfs.sorted.list > gather.args
+  cat gather.args
+
   echo "=== gather_vcfs: run GatherVcfs in sorted order ==="
-  gatk GatherVcfs \
-    $(while read -r f; do echo -n " -I $f"; done < vcfs.sorted.list) \
-    -O merged.vcf.gz
+  gatk GatherVcfs --arguments_file gather.args -O merged.vcf.gz
 
   echo "=== gather_vcfs: index merged VCF ==="
-  # Prefer GATK indexer; fall back to tabix if available
   gatk IndexFeatureFile -I merged.vcf.gz || tabix -p vcf merged.vcf.gz
 
-  # Hard-fail if index still missing (so Nextflow error is clearer)
   test -s merged.vcf.gz.tbi
 
   echo "=== gather_vcfs: outputs ==="
   ls -lah merged.vcf.gz merged.vcf.gz.tbi
-
   """
 }
+
 
 
 /*
