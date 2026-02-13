@@ -241,12 +241,10 @@ process gather_vcfs {
   """
   set -euo pipefail
   echo "=== gather_vcfs: START ==="
-  echo "PWD=\$(pwd)"
-  echo "Inputs:"
   ls -lah
 
   echo "=== gather_vcfs: files we will gather (unsorted) ==="
-  printf "%s\\n" ${vcfs} > vcfs.list
+  ls -1 ${vcfs} > vcfs.list
   cat vcfs.list
 
   echo "=== gather_vcfs: sort by shard number in filename ==="
@@ -254,7 +252,7 @@ process gather_vcfs {
   cat vcfs.sorted.list
 
   echo "=== gather_vcfs: build args file (-I per line) ==="
-  awk '{print "-I",$0}' vcfs.sorted.list > gather.args
+  awk '{print "-I",\\\$0}' vcfs.sorted.list > gather.args
   cat gather.args
 
   echo "=== gather_vcfs: run GatherVcfs in sorted order ==="
@@ -262,14 +260,12 @@ process gather_vcfs {
 
   echo "=== gather_vcfs: index merged VCF ==="
   gatk IndexFeatureFile -I merged.vcf.gz || tabix -p vcf merged.vcf.gz
-
   test -s merged.vcf.gz.tbi
 
   echo "=== gather_vcfs: outputs ==="
   ls -lah merged.vcf.gz merged.vcf.gz.tbi
   """
 }
-
 
 
 /*
