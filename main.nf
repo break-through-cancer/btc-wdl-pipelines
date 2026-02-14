@@ -231,76 +231,45 @@ process gather_vcfs {
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-    path vcfs, arity: '1..*'
+    path vcfs
 
   output:
-    path "started.txt", optional: true
     path "merged.vcf.gz"
     path "merged.vcf.gz.tbi"
 
   script:
   """
   set -euo pipefail
-
-  # === PROVE CONTAINER ACTUALLY STARTED ===
-  echo "SCRIPT_STARTED \$(date)" > started.txt
+  echo "=== gather_vcfs: START ==="
   echo "PWD=\$(pwd)"
-  echo "Listing initial workdir:"
+  echo "Inputs:"
   ls -lah
-  echo "======================================="
 
-  # === Discover staged VCFs safely ===
-  echo "Discovering staged VCF files..."
-  find . -maxdepth 1 -type f -name '*.vcf.gz' -print | sort > vcfs.list
+  echo "=== gather_vcfs: files we will gather (unsorted) ==="
+  printf "%s\\n" ${vcfs} > vcfs.list
+  cat vcfs.list
 
-  echo "Number of VCFs found:"
-  wc -l vcfs.list
-  echo "First few:"
-  head vcfs.list
-  echo "Last few:"
-  tail vcfs.list
+  echo "=== gather_vcfs: sort by shard number in filename ==="
+  # Filenames look like: out.0000-scattered.vcf.gz
+  # Sort key: the 2nd '.'-delimited field (0000-scattered...), numeric sort works because it starts with digits
+  sort -t. -k2,2n vcfs.list > vcfs.sorted.list
+  cat vcfs.sorted.list
 
-  # === Fail fast if filenames don't match expected pattern ===
-  if awk '{ if (\$0 !~ /out\\.[0-9]+/) { bad=1; print "BAD:", \$0 > "/dev/stderr" } } END{ exit bad }' vcfs.list; then
-    echo "All filenames match expected pattern."
-  else
-    echo "ERROR: Some VCF filenames do not match out.<num> pattern." >&2
-    exit 2
-  fi
+  echo "=== gather_vcfs: run GatherVcfs in sorted order ==="
+  gatk GatherVcfs \
+    $(while read -r f; do echo -n " -I $f"; done < vcfs.sorted.list) \
+    -O merged.vcf.gz
 
-  # === Sort numerically by shard number ===
-  echo "Sorting VCFs by shard number..."
-  sed -E 's/.*out\\.([0-9]+).*/\\1\\t&/' vcfs.list \
-    | sort -k1,1n \
-    | cut -f2- > vcfs.sorted.list
+  echo "=== gather_vcfs: index merged VCF ==="
+  # Prefer GATK indexer; fall back to tabix if available
+  gatk IndexFeatureFile -I merged.vcf.gz || tabix -p vcf merged.vcf.gz
 
-  echo "Sorted list preview:"
-  head vcfs.sorted.list
-  tail vcfs.sorted.list
-
-  # === Build argument file safely ===
-  echo "Building GATK argument file..."
-  awk '{print "-I="\\\$0}' vcfs.sorted.list > gather.args
-  echo "Argument preview:"
-  head gather.args
-  tail gather.args
-
-  # === Run GatherVcfs ===
-  echo "Running GATK GatherVcfs at \$(date)"
-  time gatk GatherVcfs --arguments_file gather.args -O merged.vcf.gz
-  echo "Gather finished at \$(date)"
-
-  # === Ensure index exists ===
-  if [ ! -s merged.vcf.gz.tbi ]; then
-    echo "Index missing, creating..."
-    gatk IndexFeatureFile -I merged.vcf.gz || tabix -p vcf merged.vcf.gz
-  fi
-
+  # Hard-fail if index still missing (so Nextflow error is clearer)
   test -s merged.vcf.gz.tbi
 
-  echo "Final outputs:"
+  echo "=== gather_vcfs: outputs ==="
   ls -lah merged.vcf.gz merged.vcf.gz.tbi
-  echo "=== gather_vcfs COMPLETE ==="
+
   """
 }
 
