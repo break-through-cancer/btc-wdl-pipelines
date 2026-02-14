@@ -231,7 +231,7 @@ process gather_vcfs {
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-    path vcfs
+    path vcfs, arity: '1..*'
 
   output:
     path "merged.vcf.gz"
@@ -240,30 +240,57 @@ process gather_vcfs {
   script:
   """
   set -euo pipefail
+
   echo "=== gather_vcfs: START ==="
+  echo "START_TIME: \$(date)"
+  echo "PWD=\$(pwd)"
+  echo "Workdir contents (early):"
   ls -lah
 
-  echo "=== gather_vcfs: files we will gather (unsorted) ==="
-  ls -1 ${vcfs} > vcfs.list
-  cat vcfs.list
+  # Robust: list staged VCFs from the filesystem, not from shell-expanding \${vcfs}
+  echo "=== gather_vcfs: discover staged VCFs ==="
+  find . -maxdepth 1 -type f -name '*.vcf.gz' -print | sort > vcfs.list
 
-  echo "=== gather_vcfs: sort by shard number in filename ==="
-  sort -t. -k2,2n vcfs.list > vcfs.sorted.list
-  cat vcfs.sorted.list
+  echo "Num VCFs found:"
+  wc -l vcfs.list
+  echo "First few:"
+  head vcfs.list
+  echo "Last few:"
+  tail vcfs.list
 
-  echo "=== gather_vcfs: build args file (-I per line) ==="
-  awk '{print "-I",\\\$0}' vcfs.sorted.list > gather.args
-  cat gather.args
+  # Fail fast if filenames don't look like out.<num>...
+  if awk '{ if (\$0 !~ /out\\.[0-9]+/) { bad=1; print "BAD:", \$0 > "/dev/stderr" } } END{ exit bad }' vcfs.list; then
+    echo "All filenames match out.<num> pattern."
+  else
+    echo "ERROR: Some VCF filenames do not match out.<num> pattern (see BAD lines above)." >&2
+    exit 2
+  fi
 
-  echo "=== gather_vcfs: run GatherVcfs in sorted order ==="
-  gatk GatherVcfs --arguments_file gather.args -O merged.vcf.gz
+  echo "=== gather_vcfs: sort by shard number extracted from filename ==="
+  sed -E 's/.*out\\.([0-9]+).*/\\1\\t&/' vcfs.list | sort -k1,1n | cut -f2- > vcfs.sorted.list
+  head vcfs.sorted.list
+  tail vcfs.sorted.list
 
-  echo "=== gather_vcfs: index merged VCF ==="
-  gatk IndexFeatureFile -I merged.vcf.gz || tabix -p vcf merged.vcf.gz
+  echo "=== gather_vcfs: build args file ==="
+  awk '{print "-I="\\\$0}' vcfs.sorted.list > gather.args
+  echo "Args preview:"
+  head gather.args
+  tail gather.args
+
+  echo "=== gather_vcfs: run GatherVcfs ==="
+  echo "GATHER_START: \$(date)"
+  time gatk GatherVcfs --arguments_file gather.args -O merged.vcf.gz
+  echo "GATHER_END: \$(date)"
+
+  echo "=== gather_vcfs: ensure index ==="
+  if [ ! -s merged.vcf.gz.tbi ]; then
+    gatk IndexFeatureFile -I merged.vcf.gz || tabix -p vcf merged.vcf.gz
+  fi
   test -s merged.vcf.gz.tbi
 
   echo "=== gather_vcfs: outputs ==="
   ls -lah merged.vcf.gz merged.vcf.gz.tbi
+  echo "END_TIME: \$(date)"
   """
 }
 
