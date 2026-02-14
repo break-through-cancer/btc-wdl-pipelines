@@ -234,6 +234,7 @@ process gather_vcfs {
     path vcfs, arity: '1..*'
 
   output:
+    path "started.txt", optional: true
     path "merged.vcf.gz"
     path "merged.vcf.gz.tbi"
 
@@ -241,56 +242,65 @@ process gather_vcfs {
   """
   set -euo pipefail
 
-  echo "=== gather_vcfs: START ==="
-  echo "START_TIME: \$(date)"
+  # === PROVE CONTAINER ACTUALLY STARTED ===
+  echo "SCRIPT_STARTED \$(date)" > started.txt
   echo "PWD=\$(pwd)"
-  echo "Workdir contents (early):"
+  echo "Listing initial workdir:"
   ls -lah
+  echo "======================================="
 
-  # Robust: list staged VCFs from the filesystem, not from shell-expanding \${vcfs}
-  echo "=== gather_vcfs: discover staged VCFs ==="
+  # === Discover staged VCFs safely ===
+  echo "Discovering staged VCF files..."
   find . -maxdepth 1 -type f -name '*.vcf.gz' -print | sort > vcfs.list
 
-  echo "Num VCFs found:"
+  echo "Number of VCFs found:"
   wc -l vcfs.list
   echo "First few:"
   head vcfs.list
   echo "Last few:"
   tail vcfs.list
 
-  # Fail fast if filenames don't look like out.<num>...
+  # === Fail fast if filenames don't match expected pattern ===
   if awk '{ if (\$0 !~ /out\\.[0-9]+/) { bad=1; print "BAD:", \$0 > "/dev/stderr" } } END{ exit bad }' vcfs.list; then
-    echo "All filenames match out.<num> pattern."
+    echo "All filenames match expected pattern."
   else
-    echo "ERROR: Some VCF filenames do not match out.<num> pattern (see BAD lines above)." >&2
+    echo "ERROR: Some VCF filenames do not match out.<num> pattern." >&2
     exit 2
   fi
 
-  echo "=== gather_vcfs: sort by shard number extracted from filename ==="
-  sed -E 's/.*out\\.([0-9]+).*/\\1\\t&/' vcfs.list | sort -k1,1n | cut -f2- > vcfs.sorted.list
+  # === Sort numerically by shard number ===
+  echo "Sorting VCFs by shard number..."
+  sed -E 's/.*out\\.([0-9]+).*/\\1\\t&/' vcfs.list \
+    | sort -k1,1n \
+    | cut -f2- > vcfs.sorted.list
+
+  echo "Sorted list preview:"
   head vcfs.sorted.list
   tail vcfs.sorted.list
 
-  echo "=== gather_vcfs: build args file ==="
+  # === Build argument file safely ===
+  echo "Building GATK argument file..."
   awk '{print "-I="\\\$0}' vcfs.sorted.list > gather.args
-  echo "Args preview:"
+  echo "Argument preview:"
   head gather.args
   tail gather.args
 
-  echo "=== gather_vcfs: run GatherVcfs ==="
-  echo "GATHER_START: \$(date)"
+  # === Run GatherVcfs ===
+  echo "Running GATK GatherVcfs at \$(date)"
   time gatk GatherVcfs --arguments_file gather.args -O merged.vcf.gz
-  echo "GATHER_END: \$(date)"
+  echo "Gather finished at \$(date)"
 
-  echo "=== gather_vcfs: ensure index ==="
+  # === Ensure index exists ===
   if [ ! -s merged.vcf.gz.tbi ]; then
+    echo "Index missing, creating..."
     gatk IndexFeatureFile -I merged.vcf.gz || tabix -p vcf merged.vcf.gz
   fi
+
   test -s merged.vcf.gz.tbi
 
-  echo "=== gather_vcfs: outputs ==="
+  echo "Final outputs:"
   ls -lah merged.vcf.gz merged.vcf.gz.tbi
-  echo "END_TIME: \$(date)"
+  echo "=== gather_vcfs COMPLETE ==="
   """
 }
 
