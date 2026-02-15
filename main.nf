@@ -275,7 +275,7 @@ process gather_vcfs {
   tail vcfs.sorted.list
 
   echo "Building GATK argument file..."
-  awk '{print "-I=" $1}' vcfs.sorted.list > gather.args
+  sed 's|^|-I=|' vcfs.sorted.list > gather.args
   echo "Argument preview:"
   head gather.args
   tail gather.args
