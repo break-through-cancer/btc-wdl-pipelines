@@ -242,14 +242,12 @@ process gather_vcfs {
   """
   set -euo pipefail
 
-  # === PROVE CONTAINER ACTUALLY STARTED ===
   echo "SCRIPT_STARTED \$(date)" > started.txt
   echo "PWD=\$(pwd)"
   echo "Listing initial workdir:"
   ls -lah
   echo "======================================="
 
-  # === Discover staged VCFs safely ===
   echo "Discovering staged VCF files..."
   find . -maxdepth 1 -type f -name '*.vcf.gz' -print | sort > vcfs.list
 
@@ -260,7 +258,6 @@ process gather_vcfs {
   echo "Last few:"
   tail vcfs.list
 
-  # === Fail fast if filenames don't match expected pattern ===
   if awk '{ if (\$0 !~ /out\\.[0-9]+/) { bad=1; print "BAD:", \$0 > "/dev/stderr" } } END{ exit bad }' vcfs.list; then
     echo "All filenames match expected pattern."
   else
@@ -268,7 +265,6 @@ process gather_vcfs {
     exit 2
   fi
 
-  # === Sort numerically by shard number ===
   echo "Sorting VCFs by shard number..."
   sed -E 's/.*out\\.([0-9]+).*/\\1\\t&/' vcfs.list \
     | sort -k1,1n \
@@ -278,19 +274,16 @@ process gather_vcfs {
   head vcfs.sorted.list
   tail vcfs.sorted.list
 
-  # === Build argument file safely ===
   echo "Building GATK argument file..."
-  awk '{print "-I="\\\$0}' vcfs.sorted.list > gather.args
+  awk '{print "-I=" $1}' vcfs.sorted.list > gather.args
   echo "Argument preview:"
   head gather.args
   tail gather.args
 
-  # === Run GatherVcfs ===
   echo "Running GATK GatherVcfs at \$(date)"
   time gatk GatherVcfs --arguments_file gather.args -O merged.vcf.gz
   echo "Gather finished at \$(date)"
 
-  # === Ensure index exists ===
   if [ ! -s merged.vcf.gz.tbi ]; then
     echo "Index missing, creating..."
     gatk IndexFeatureFile -I merged.vcf.gz || tabix -p vcf merged.vcf.gz
@@ -303,8 +296,6 @@ process gather_vcfs {
   echo "=== gather_vcfs COMPLETE ==="
   """
 }
-
-
 
 
 
