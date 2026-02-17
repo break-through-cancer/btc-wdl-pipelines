@@ -80,7 +80,8 @@ process mutect_wrapper {
           path(ref_fasta),
           path(ref_fai),
           path(ref_dict),
-          path(germline_resource)
+          path(germline_resource),
+          path(force_call_file)
     val extra_args
 
   output:
@@ -152,6 +153,7 @@ process mutect_wrapper {
     --intervals "$interval_shard" \\
     --tmp-dir . \\
     --tumor-sample "\$tumor_sample" \\
+    --alleles "$force_call_file" \\
     ${extra_args} \\
     --output "\${out_prefix}.vcf.gz"
 
@@ -286,6 +288,7 @@ workflow {
       file(params.ref_fai),
       file(params.ref_dict),
       file(params.germline_resource)
+      file(params.force_call_file)
     )
   }
 

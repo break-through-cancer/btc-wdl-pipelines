@@ -47,6 +47,14 @@
         "pathType": "reference",
         "file": "**/*"
       },
+      "force_call_file": {
+        "title": "force_call_file",
+        "description": "vcf that you want to force call with",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
       "m2_extra_args": {
         "title": "extra args",
         "description": "(optional) a string of additional command line arguments of the form \"-argument1 value1 -argument2 value2\" for Mutect 2. Most users will not need this",
