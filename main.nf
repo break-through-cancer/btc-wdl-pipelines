@@ -82,7 +82,7 @@ process mutect_wrapper {
           path(ref_dict),
           path(germline_resource),
           path(force_call_file),
-          path(force_call_file_index),
+          path(force_call_file_index)
     val extra_args
 
   output:
