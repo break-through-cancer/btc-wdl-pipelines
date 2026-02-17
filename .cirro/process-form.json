@@ -52,7 +52,7 @@
         "description": "vcf that you want to force call with",
         "type": "string",
         "multiple": false,
-        "pathType": "reference",
+        "pathType": "dataset",
         "file": "**/*"
       },
       "m2_extra_args": {
