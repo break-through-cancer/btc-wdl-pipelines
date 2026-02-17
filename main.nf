@@ -287,7 +287,7 @@ workflow {
       file(params.ref_fasta),
       file(params.ref_fai),
       file(params.ref_dict),
-      file(params.germline_resource)
+      file(params.germline_resource),
       file(params.force_call_file)
     )
   }
