@@ -81,7 +81,8 @@ process mutect_wrapper {
           path(ref_fai),
           path(ref_dict),
           path(germline_resource),
-          path(force_call_file)
+          path(force_call_file),
+          path(force_call_file_index),
     val extra_args
 
   output:
@@ -288,7 +289,8 @@ workflow {
       file(params.ref_fai),
       file(params.ref_dict),
       file(params.germline_resource),
-      file(params.force_call_file)
+      file(params.force_call_file),
+      file(params.force_call_file_index)
     )
   }
 

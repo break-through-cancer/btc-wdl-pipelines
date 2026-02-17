@@ -16,6 +16,7 @@
     "germline_resource": "$.dataset.params.germline_resource",
     "intervals": "$.dataset.params.intervals",
     "force_call_file": "$.dataset.params.force_call_file",
+    "force_call_file_index": "$.dataset.params.force_call_file_index",
     "gnomad_version": "2.1",
     "minimum_allele_frequency": "0.0",
     "mem_gb": "128",
