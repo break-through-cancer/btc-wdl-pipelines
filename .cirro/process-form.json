@@ -77,7 +77,7 @@
         "title": "mem",
         "description": "amount of memory you're running on",
         "type": "integer",
-        "default":100
+        "default":32
       }
     },
     "required": [
