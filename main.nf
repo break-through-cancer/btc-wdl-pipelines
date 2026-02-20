@@ -8,8 +8,8 @@ params.m2_extra_args          = params.m2_extra_args ?: ''
 // Optional inputs (leave null/empty to disable)
 // params.normal_reads           = params.normal_reads ?: null
 // params.normal_reads_index     = params.normal_reads_index ?: null
-// params.force_call_file        = params.force_call_file ?: null
-// params.force_call_file_index  = params.force_call_file_index ?: null
+params.force_call_file        = params.force_call_file ?: null
+params.force_call_file_index  = params.force_call_file_index ?: null
 
 /*
  * --------------------------------------------
