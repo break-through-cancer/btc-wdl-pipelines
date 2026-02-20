@@ -75,10 +75,11 @@ process mutect_wrapper {
           path(ref_dict),
           path(germline_resource)
           
-    path(normal_bam), optional: true
-    path(normal_bam_index), optional: true
-    path(alleles_vcf), optional: true
-    path(alleles_vcf_tbi), optional: true
+    // path(normal_bam, optional: true)
+    // path(normal_bam_index, optional: true)
+    // path(alleles_vcf, optional: true)
+    // path(alleles_vcf_tbi, optional: true)
+
     val(extra_args)
 
   output:
@@ -246,18 +247,18 @@ workflow {
     )
   }
 
-  // optional channels (either emit a single path value, or emit nothing)
-  normal_bam_ch  = params.normal_reads ? Channel.value(params.normal_reads) : Channel.empty()
-  normal_bai_ch  = params.normal_reads_index ? Channel.value(params.normal_reads_index) : Channel.empty()
-  alleles_vcf_ch = params.force_call_file ? Channel.value(params.force_call_file) : Channel.empty()
-  alleles_tbi_ch = params.force_call_file_index ? Channel.value(params.force_call_file_index) : Channel.empty()
+  // // optional channels (either emit a single path value, or emit nothing)
+  // normal_bam_ch  = params.normal_reads ? Channel.value(params.normal_reads) : Channel.empty()
+  // normal_bai_ch  = params.normal_reads_index ? Channel.value(params.normal_reads_index) : Channel.empty()
+  // alleles_vcf_ch = params.force_call_file ? Channel.value(params.force_call_file) : Channel.empty()
+  // alleles_tbi_ch = params.force_call_file_index ? Channel.value(params.force_call_file_index) : Channel.empty()
 
   mutect_res = mutect_wrapper(
     base_inputs,
-    normal_bam_ch,
-    normal_bai_ch,
-    alleles_vcf_ch,
-    alleles_tbi_ch,
+    // normal_bam_ch,
+    // normal_bai_ch,
+    // alleles_vcf_ch,
+    // alleles_tbi_ch,
     params.m2_extra_args
   )
   mutect_res.vcf.view { "VCF: $it" }
