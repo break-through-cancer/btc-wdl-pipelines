@@ -6,10 +6,10 @@
 params.m2_extra_args          = params.m2_extra_args ?: ''
 
 // Optional inputs (leave null/empty to disable)
-params.normal_reads           = params.normal_reads ?: null
-params.normal_reads_index     = params.normal_reads_index ?: null
-params.force_call_file        = params.force_call_file ?: null
-params.force_call_file_index  = params.force_call_file_index ?: null
+// params.normal_reads           = params.normal_reads ?: null
+// params.normal_reads_index     = params.normal_reads_index ?: null
+// params.force_call_file        = params.force_call_file ?: null
+// params.force_call_file_index  = params.force_call_file_index ?: null
 
 /*
  * --------------------------------------------
@@ -80,7 +80,7 @@ process mutect_wrapper {
     // path(alleles_vcf, optional: true)
     // path(alleles_vcf_tbi, optional: true)
 
-    val(extra_args)
+    val extra_args
 
   output:
     path "*.vcf.gz",     emit: vcf
@@ -247,7 +247,7 @@ workflow {
     )
   }
 
-  // // optional channels (either emit a single path value, or emit nothing)
+  // optional channels (either emit a single path value, or emit nothing)
   // normal_bam_ch  = params.normal_reads ? Channel.value(params.normal_reads) : Channel.empty()
   // normal_bai_ch  = params.normal_reads_index ? Channel.value(params.normal_reads_index) : Channel.empty()
   // alleles_vcf_ch = params.force_call_file ? Channel.value(params.force_call_file) : Channel.empty()
