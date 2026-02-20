@@ -9,6 +9,8 @@
     "scatter_count": "$.dataset.params.scatter_count",
     "tumor_reads": "$.dataset.params.tumor_reads",
     "tumor_reads_index": "$.dataset.params.tumor_reads_index",
+    "normal_reads": "$.dataset.params.normal_reads",
+    "normal_reads_index": "$.dataset.params.normal_reads_index",
     "m2_extra_args": "$.dataset.params.m2_extra_args",
     "cpu": "$.dataset.params.cpu",
     "mem": "$.dataset.params.mem",
