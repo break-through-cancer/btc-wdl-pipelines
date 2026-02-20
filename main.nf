@@ -73,12 +73,13 @@ process mutect_wrapper {
           path(ref_fasta),
           path(ref_fai),
           path(ref_dict),
-          path(germline_resource),
-          path(normal_bam, optional: true),
-          path(normal_bam_index, optional: true),
-          path(alleles_vcf, optional: true),
-          path(alleles_vcf_tbi, optional: true)
-    val extra_args
+          path(germline_resource)
+          
+    path(normal_bam), optional: true
+    path(normal_bam_index), optional: true
+    path(alleles_vcf), optional: true
+    path(alleles_vcf_tbi), optional: true
+    val(extra_args)
 
   output:
     path "*.vcf.gz",     emit: vcf
@@ -224,43 +225,45 @@ process gather_vcfs {
  * --------------------------------------------
  */
 workflow {
-
   shards_ch = split_intervals(
-    file(params.ref_fasta),
-    file(params.ref_fai),
-    file(params.ref_dict),
-    file(params.intervals),
+    params.ref_fasta,
+    params.ref_fai,
+    params.ref_dict,
+    params.intervals,
     params.scatter_count as int
   ).shards.flatten()
 
-  // Optional files: if param is null/empty -> pass null, process input is optional
-  def normal_bam   = params.normal_reads         ? file(params.normal_reads)         : null
-  def normal_bai   = params.normal_reads_index   ? file(params.normal_reads_index)   : null
-  def alleles_vcf  = params.force_call_file      ? file(params.force_call_file)      : null
-  def alleles_tbi  = params.force_call_file_index? file(params.force_call_file_index): null
-
-  mutect_inputs = shards_ch.map { shard ->
+  // required tuple per shard
+  base_inputs = shards_ch.map { shard ->
     tuple(
-      file(params.tumor_reads),
-      file(params.tumor_reads_index),
+      params.tumor_reads,
+      params.tumor_reads_index,
       shard,
-      file(params.ref_fasta),
-      file(params.ref_fai),
-      file(params.ref_dict),
-      file(params.germline_resource),
-      normal_bam,
-      normal_bai,
-      alleles_vcf,
-      alleles_tbi
+      params.ref_fasta,
+      params.ref_fai,
+      params.ref_dict,
+      params.germline_resource
     )
   }
 
-  mutect_res = mutect_wrapper(mutect_inputs, params.m2_extra_args)
+  // optional channels (either emit a single path value, or emit nothing)
+  normal_bam_ch  = params.normal_reads ? Channel.value(params.normal_reads) : Channel.empty()
+  normal_bai_ch  = params.normal_reads_index ? Channel.value(params.normal_reads_index) : Channel.empty()
+  alleles_vcf_ch = params.force_call_file ? Channel.value(params.force_call_file) : Channel.empty()
+  alleles_tbi_ch = params.force_call_file_index ? Channel.value(params.force_call_file_index) : Channel.empty()
 
+  mutect_res = mutect_wrapper(
+    base_inputs,
+    normal_bam_ch,
+    normal_bai_ch,
+    alleles_vcf_ch,
+    alleles_tbi_ch,
+    params.m2_extra_args
+  )
   mutect_res.vcf.view { "VCF: $it" }
+
   gather_vcfs(mutect_res.vcf.collect())
 }
-
 
 // params.m2_extra_args = params.m2_extra_args ?: ''
 // def do_force = params.force_call_file
