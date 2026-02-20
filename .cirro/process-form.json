@@ -15,7 +15,38 @@
         "type": "integer",
         "default": 50
       },
-    
+      "tumor_reads": {
+        "title": "tumor reads",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "dataset",
+        "file": "**/*"
+      },
+      "tumor_reads_index": {
+        "title": "tumor reads index",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "dataset",
+        "file": "**/*"
+      },
+      "normal_reads": {
+        "title": "normal reads",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "dataset",
+        "file": "**/*"
+      },
+      "normal_reads_index": {
+        "title": "normal reads index",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "dataset",
+        "file": "**/*"
+      },
       "germline_resource": {
         "title": "germline resource",
         "description": "",
