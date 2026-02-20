@@ -406,52 +406,80 @@ workflow {
     params.scatter_count as int
   ).shards.flatten()
 
-  def mutect_res
+  def normal_bam  = (params.use_matched_normal && params.normal_reads)       ? file(params.normal_reads)       : null
+  def normal_bai  = (params.use_matched_normal && params.normal_reads_index) ? file(params.normal_reads_index) : null
 
-  // Pair each shard with shared inputs so mutect runs once per shard
-  if(do_force) {
-    mutect_inputs = shards_ch.map { shard ->
-      tuple(
-        file(params.tumor_reads),
-        file(params.tumor_reads_index),
-        shard,
-        file(params.ref_fasta),
-        file(params.ref_fai),
-        file(params.ref_dict),
-        file(params.germline_resource),
-        file(params.force_call_file),
-        file(params.force_call_file_index)
-      )
-    }
+  def alleles_vcf = (params.do_force && params.force_call_file)       ? file(params.force_call_file)       : null
+  def alleles_tbi = (params.do_force && params.force_call_file_index) ? file(params.force_call_file_index) : null
 
-    mutect_res = mutect_wrapper_force(
-      mutect_inputs,
-      params.m2_extra_args
+  // One tuple per shard
+  mutect_inputs = shards_ch.map { shard ->
+    tuple(
+      file(params.tumor_reads),
+      file(params.tumor_reads_index),
+      shard,
+      file(params.ref_fasta),
+      file(params.ref_fai),
+      file(params.ref_dict),
+      file(params.germline_resource),
+      normal_bam,
+      normal_bai,
+      alleles_vcf,
+      alleles_tbi
     )
-    
-  } else {
-    mutect_inputs = shards_ch.map { shard ->
-      tuple(
-        file(params.tumor_reads),
-        file(params.tumor_reads_index),
-        shard,
-        file(params.ref_fasta),
-        file(params.ref_fai),
-        file(params.ref_dict),
-        file(params.germline_resource)
-      )
-    }
-    mutect_res = mutect_wrapper(
-      mutect_inputs,
-      params.m2_extra_args
-    )
-
   }
 
+  mutect_res = mutect_wrapper(mutect_inputs, params.m2_extra_args)
 
   mutect_res.vcf.view { "VCF: $it" }
 
-
   gather_vcfs(mutect_res.vcf.collect())
+  // def mutect_res
+
+  // // Pair each shard with shared inputs so mutect runs once per shard
+  // if(do_force) {
+  //   mutect_inputs = shards_ch.map { shard ->
+  //     tuple(
+  //       file(params.tumor_reads),
+  //       file(params.tumor_reads_index),
+  //       shard,
+  //       file(params.ref_fasta),
+  //       file(params.ref_fai),
+  //       file(params.ref_dict),
+  //       file(params.germline_resource),
+  //       file(params.force_call_file),
+  //       file(params.force_call_file_index)
+  //     )
+  //   }
+
+  //   mutect_res = mutect_wrapper_force(
+  //     mutect_inputs,
+  //     params.m2_extra_args
+  //   )
+
+  // } else {
+  //   mutect_inputs = shards_ch.map { shard ->
+  //     tuple(
+  //       file(params.tumor_reads),
+  //       file(params.tumor_reads_index),
+  //       shard,
+  //       file(params.ref_fasta),
+  //       file(params.ref_fai),
+  //       file(params.ref_dict),
+  //       file(params.germline_resource)
+  //     )
+  //   }
+  //   mutect_res = mutect_wrapper(
+  //     mutect_inputs,
+  //     params.m2_extra_args
+  //   )
+
+  // }
+
+
+  // mutect_res.vcf.view { "VCF: $it" }
+
+
+  // gather_vcfs(mutect_res.vcf.collect())
 }
 
