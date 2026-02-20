@@ -68,8 +68,6 @@ def main():
     else:
         print("No normal detected. Tumor-only mode.")
 
-    ds.save_parameters()
-
     print("\nFinal parameters:")
     print(json.dumps(ds.params, indent=2, default=str))
 
