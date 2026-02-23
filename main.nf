@@ -167,6 +167,12 @@ process mutect_wrapper {
     echo "NO_FILE sentinel for alleles -> no force-calling."
   fi
 
+  if [[ ! -f "${germline_resource}.tbi" ]]; then
+    echo "No .tbi found for germline_resource; creating with tabix..."
+    tabix -f -p vcf "$germline_resource"
+  fi
+  test -s "${germline_resource}.tbi"
+
   shard_base=$(basename "$interval_shard" .intervals)
   out_prefix="out.${shard_base}"
 
