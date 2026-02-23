@@ -106,8 +106,25 @@ process mutect_wrapper {
   '''
   set -euo pipefail
 
-  avail_mem_mb=!{ task.memory ? (task.memory.mega * 0.8).intValue() : 3072 }
-  heap_mb=!{ Math.min(task.memory ? (task.memory.mega * 0.8).intValue() : 3072, 24000) }
+  # Bind Nextflow inputs to bash vars (shell: does NOT auto-export them)
+  tumor_bam="!{tumor_bam}"
+  tumor_bam_index="!{tumor_bam_index}"
+  interval_shard="!{interval_shard}"
+  ref_fasta="!{ref_fasta}"
+  ref_fai="!{ref_fai}"
+  ref_dict="!{ref_dict}"
+  germline_resource="!{germline_resource}"
+
+  normal_bam="!{normal_bam}"
+  normal_bam_index="!{normal_bam_index}"
+  alleles_vcf="!{alleles_vcf}"
+  alleles_vcf_tbi="!{alleles_vcf_tbi}"
+
+  extra_args="!{extra_args}"
+
+  # Heap sizing
+  avail_mem_mb="!{ task.memory ? (task.memory.mega * 0.8).intValue() : 3072 }"
+  heap_mb="!{ Math.min(task.memory ? (task.memory.mega * 0.8).intValue() : 3072, 24000) }"
 
   echo "=== mutect_wrapper: START ==="
   echo "PWD=$(pwd)"
