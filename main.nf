@@ -3,13 +3,19 @@
  * Defaults / params
  * --------------------------------------------
  */
-params.m2_extra_args          = params.m2_extra_args ?: ''
 
-// Optional inputs (leave null/empty to disable)
-params.normal_reads           = params.normal_reads ?: null
-params.normal_reads_index     = params.normal_reads_index ?: null
-params.force_call_file        = params.force_call_file ?: null
-params.force_call_file_index  = params.force_call_file_index ?: null
+// Avoid "Access to undefined parameter" warnings:
+if( !params.containsKey('m2_extra_args') )
+  params.m2_extra_args = ''
+
+if( !params.containsKey('normal_reads') )
+  params.normal_reads = null
+if( !params.containsKey('normal_reads_index') )
+  params.normal_reads_index = null
+if( !params.containsKey('force_call_file') )
+  params.force_call_file = null
+if( !params.containsKey('force_call_file_index') )
+  params.force_call_file_index = null
 
 /*
  * --------------------------------------------
@@ -57,9 +63,6 @@ process split_intervals {
 /*
  * --------------------------------------------
  * mutect_wrapper  (Fix B)
- *   - ONE shard per task
- *   - required tuple only
- *   - optional normal + alleles are separate optional path inputs
  * --------------------------------------------
  */
 process mutect_wrapper {
@@ -78,30 +81,25 @@ process mutect_wrapper {
       path(germline_resource)
     )
 
-    // optional inputs (may be absent)
-    path normal_bam,       optional: true
-    path normal_bam_index, optional: true
-    path alleles_vcf,      optional: true
-    path alleles_vcf_tbi,  optional: true
+    // OPTIONALS (use function-call syntax; this prevents "No such variable: optional")
+    path(normal_bam,       optional: true)
+    path(normal_bam_index, optional: true)
+    path(alleles_vcf,      optional: true)
+    path(alleles_vcf_tbi,  optional: true)
 
     val extra_args
 
   output:
-    path "*.vcf.gz",      emit: vcf
-    path "*.vcf.gz.tbi",  emit: tbi
-    path "*.stats",       optional: true, emit: stats
-    path "*.f1r2.tar.gz", optional: true, emit: f1r2
-    path "versions.yml",  optional: true, emit: versions
+    path("*.vcf.gz"),      emit: vcf
+    path("*.vcf.gz.tbi"),  emit: tbi
+    path("*.stats"),       optional: true, emit: stats
+    path("*.f1r2.tar.gz"), optional: true, emit: f1r2
+    path("versions.yml"),  optional: true, emit: versions
 
-  /*
-   * Use `shell:` so bash ${var:-} etc won't collide with Groovy interpolation.
-   * Nextflow variables are inserted with !{...}
-   */
   shell:
   '''
   set -euo pipefail
 
-  # ----- heap sizing from task memory -----
   avail_mem_mb=!{ task.memory ? (task.memory.mega * 0.8).intValue() : 3072 }
   heap_mb=!{ Math.min(task.memory ? (task.memory.mega * 0.8).intValue() : 3072, 24000) }
 
@@ -111,7 +109,6 @@ process mutect_wrapper {
   echo "extra_args='!{extra_args}'"
   ls -lah
 
-  # --- tumor sample name (SM tag) ---
   tumor_sample=$(samtools view -H "$tumor_bam" \
     | awk -F'\t' '/^@RG/ { for (i=1;i<=NF;i++) if ($i ~ /^SM:/) { sub(/^SM:/,"",$i); print $i } }' \
     | sort -u)
@@ -127,7 +124,6 @@ process mutect_wrapper {
   fi
   echo "Detected tumor sample: $tumor_sample"
 
-  # --- normal sample (if provided) ---
   normal_args=""
   if [[ -n "${normal_bam:-}" && -f "$normal_bam" ]]; then
     echo "Normal BAM provided: $normal_bam"
@@ -145,14 +141,12 @@ process mutect_wrapper {
       echo "$normal_sample" >&2
       exit 1
     fi
-    echo "Detected normal sample: $normal_sample"
 
     normal_args="--input $normal_bam --normal-sample $normal_sample"
   else
     echo "No normal BAM provided -> tumor-only mode."
   fi
 
-  # --- alleles (if provided) ---
   alleles_args=""
   if [[ -n "${alleles_vcf:-}" && -f "$alleles_vcf" ]]; then
     echo "Alleles VCF provided: $alleles_vcf"
@@ -161,7 +155,6 @@ process mutect_wrapper {
     echo "No alleles VCF provided -> no force-calling."
   fi
 
-  # Ensure germline resource indexed (in workdir local copy)
   if [[ ! -f "${germline_resource}.tbi" ]]; then
     echo "No .tbi found for germline resource; indexing..."
     gatk IndexFeatureFile -F "$germline_resource"
@@ -170,7 +163,6 @@ process mutect_wrapper {
   shard_base=$(basename "$interval_shard" .intervals)
   out_prefix="out.${shard_base}"
 
-  echo "=== mutect_wrapper: RUN Mutect2 ==="
   gatk --java-options "-Xmx${heap_mb}M -XX:-UsePerfData" Mutect2 \
     --input "$tumor_bam" \
     ${normal_args} \
@@ -183,9 +175,7 @@ process mutect_wrapper {
     !{extra_args} \
     --output "${out_prefix}.vcf.gz"
 
-  ls -lah "${out_prefix}.vcf.gz" "${out_prefix}.vcf.gz.tbi" 2>/dev/null || true
   ( gatk --version > versions.yml 2>&1 || echo "gatk --version failed (non-fatal)" > versions.yml )
-
   echo "=== mutect_wrapper: END ==="
   '''
 }
@@ -245,7 +235,6 @@ workflow {
     params.scatter_count as int
   ).shards.flatten()
 
-  // Required tuple per shard
   base_inputs = shards_ch.map { shard ->
     tuple(
       params.tumor_reads,
