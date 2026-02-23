@@ -56,10 +56,10 @@ process split_intervals {
 
 /*
  * --------------------------------------------
- * mutect_wrapper
+ * mutect_wrapper  (Fix B)
  *   - ONE shard per task
- *   - optional normal: enabled iff normal_bam exists
- *   - optional force-call alleles: enabled iff alleles_vcf exists
+ *   - required tuple only
+ *   - optional normal + alleles are separate optional path inputs
  * --------------------------------------------
  */
 process mutect_wrapper {
@@ -67,18 +67,22 @@ process mutect_wrapper {
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-    tuple \
+    // required tuple per shard
+    tuple(
       path(tumor_bam),
       path(tumor_bam_index),
       path(interval_shard),
       path(ref_fasta),
       path(ref_fai),
       path(ref_dict),
-      path(germline_resource),
-      path(normal_bam, optional: true),
-      path(normal_bam_index, optional: true),
-      path(alleles_vcf, optional: true),
-      path(alleles_vcf_tbi, optional: true)
+      path(germline_resource)
+    )
+
+    // optional inputs (may be absent)
+    path normal_bam,       optional: true
+    path normal_bam_index, optional: true
+    path alleles_vcf,      optional: true
+    path alleles_vcf_tbi,  optional: true
 
     val extra_args
 
@@ -143,7 +147,6 @@ process mutect_wrapper {
     fi
     echo "Detected normal sample: $normal_sample"
 
-    # Mutect2 expects tumor BAM as --input plus normal BAM as --input too
     normal_args="--input $normal_bam --normal-sample $normal_sample"
   else
     echo "No normal BAM provided -> tumor-only mode."
@@ -153,7 +156,6 @@ process mutect_wrapper {
   alleles_args=""
   if [[ -n "${alleles_vcf:-}" && -f "$alleles_vcf" ]]; then
     echo "Alleles VCF provided: $alleles_vcf"
-    # (tbi is optional but if provided it will localize too)
     alleles_args="--alleles $alleles_vcf"
   else
     echo "No alleles VCF provided -> no force-calling."
@@ -187,7 +189,6 @@ process mutect_wrapper {
   echo "=== mutect_wrapper: END ==="
   '''
 }
-
 
 /*
  * --------------------------------------------
@@ -244,6 +245,7 @@ workflow {
     params.scatter_count as int
   ).shards.flatten()
 
+  // Required tuple per shard
   base_inputs = shards_ch.map { shard ->
     tuple(
       params.tumor_reads,
@@ -252,16 +254,33 @@ workflow {
       params.ref_fasta,
       params.ref_fai,
       params.ref_dict,
-      params.germline_resource,
-      params.normal_reads ?: null,
-      params.normal_reads_index ?: null,
-      params.force_call_file ?: null,
-      params.force_call_file_index ?: null
+      params.germline_resource
     )
   }
 
+  // Optional channels: emit ONE value or emit NOTHING
+  normal_bam_ch = params.normal_reads
+    ? Channel.value(params.normal_reads)
+    : Channel.empty()
+
+  normal_bai_ch = params.normal_reads_index
+    ? Channel.value(params.normal_reads_index)
+    : Channel.empty()
+
+  alleles_vcf_ch = params.force_call_file
+    ? Channel.value(params.force_call_file)
+    : Channel.empty()
+
+  alleles_tbi_ch = params.force_call_file_index
+    ? Channel.value(params.force_call_file_index)
+    : Channel.empty()
+
   mutect_res = mutect_wrapper(
     base_inputs,
+    normal_bam_ch,
+    normal_bai_ch,
+    alleles_vcf_ch,
+    alleles_tbi_ch,
     params.m2_extra_args
   )
 
