@@ -19,12 +19,19 @@ if( !params.containsKey('force_call_file_index') )
 
 /*
  * --------------------------------------------
- * Sentinel file (for "no optional input")
- *   - We create it at runtime so you don't have to commit assets/NO_FILE
+ * Sentinel files (distinct basenames to avoid input name collisions)
+ *   - We create them at runtime so you don't have to commit assets/*
  * --------------------------------------------
  */
-def NO_FILE_PATH = "${workflow.projectDir}/assets/NO_FILE"
-def NO_FILE = null
+def NO_NORMAL_BAM_PATH   = "${workflow.projectDir}/assets/NO_NORMAL_BAM"
+def NO_NORMAL_BAI_PATH   = "${workflow.projectDir}/assets/NO_NORMAL_BAI"
+def NO_ALLELES_VCF_PATH  = "${workflow.projectDir}/assets/NO_ALLELES_VCF"
+def NO_ALLELES_TBI_PATH  = "${workflow.projectDir}/assets/NO_ALLELES_TBI"
+
+def NO_NORMAL_BAM  = null
+def NO_NORMAL_BAI  = null
+def NO_ALLELES_VCF = null
+def NO_ALLELES_TBI = null
 
 /*
  * --------------------------------------------
@@ -71,7 +78,7 @@ process split_intervals {
 
 /*
  * --------------------------------------------
- * mutect_wrapper (NO optional inputs; uses sentinel NO_FILE)
+ * mutect_wrapper (NO optional inputs; uses sentinel files)
  * --------------------------------------------
  */
 process mutect_wrapper {
@@ -89,7 +96,7 @@ process mutect_wrapper {
       path(germline_resource)
     )
 
-    // always provided: either real file, or NO_FILE sentinel
+    // always provided: either real file, or sentinel file (unique per input)
     path normal_bam
     path normal_bam_index
     path alleles_vcf
@@ -129,7 +136,7 @@ process mutect_wrapper {
   echo "=== mutect_wrapper: START ==="
   echo "PWD=$(pwd)"
   echo "Task memory avail=${avail_mem_mb}M ; heap_mb=${heap_mb}M"
-  echo "extra_args='!{extra_args}'"
+  echo "extra_args='$extra_args'"
   ls -lah
 
   # --- tumor sample name (SM tag) ---
@@ -141,9 +148,9 @@ process mutect_wrapper {
   [[ $(echo "$tumor_sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values found in tumor BAM header:" >&2; echo "$tumor_sample" >&2; exit 1; }
   echo "Detected tumor sample: $tumor_sample"
 
-  # --- normal sample (if provided; sentinel name == NO_FILE) ---
+  # --- normal sample (if provided; sentinel name == NO_NORMAL_BAM) ---
   normal_args=""
-  if [[ "$(basename "$normal_bam")" != "NO_FILE" ]]; then
+  if [[ "$(basename "$normal_bam")" != "NO_NORMAL_BAM" ]]; then
     echo "Normal BAM provided: $normal_bam"
 
     normal_sample=$(samtools view -H "$normal_bam" \
@@ -155,18 +162,19 @@ process mutect_wrapper {
 
     normal_args="--input $normal_bam --normal-sample $normal_sample"
   else
-    echo "NO_FILE sentinel for normal -> tumor-only mode."
+    echo "NO_NORMAL_BAM sentinel -> tumor-only mode."
   fi
 
-  # --- alleles (if provided; sentinel name == NO_FILE) ---
+  # --- alleles (if provided; sentinel name == NO_ALLELES_VCF) ---
   alleles_args=""
-  if [[ "$(basename "$alleles_vcf")" != "NO_FILE" ]]; then
+  if [[ "$(basename "$alleles_vcf")" != "NO_ALLELES_VCF" ]]; then
     echo "Alleles VCF provided: $alleles_vcf"
     alleles_args="--alleles $alleles_vcf"
   else
-    echo "NO_FILE sentinel for alleles -> no force-calling."
+    echo "NO_ALLELES_VCF sentinel -> no force-calling."
   fi
 
+  # --- ensure germline resource has tabix index ---
   if [[ ! -f "${germline_resource}.tbi" ]]; then
     echo "No .tbi found for germline_resource; creating with tabix..."
     tabix -f -p vcf "$germline_resource"
@@ -186,7 +194,7 @@ process mutect_wrapper {
     --tmp-dir . \
     --tumor-sample "$tumor_sample" \
     ${alleles_args} \
-    !{extra_args} \
+    ${extra_args} \
     --output "${out_prefix}.vcf.gz"
 
   ( gatk --version > versions.yml 2>&1 || echo "gatk --version failed (non-fatal)" > versions.yml )
@@ -227,7 +235,7 @@ process gather_vcfs {
   time gatk GatherVcfs --arguments_file gather.args -O merged.vcf.gz
 
   if [ ! -s merged.vcf.gz.tbi ]; then
-    tabix -f -p vcf merged.vcf.gz || gatk IndexFeatureFile -F merged.vcf.gz
+    tabix -f -p vcf merged.vcf.gz || gatk IndexFeatureFile -I merged.vcf.gz
   fi
   test -s merged.vcf.gz.tbi
 
@@ -243,15 +251,21 @@ process gather_vcfs {
 workflow {
 
   /*
-   * Create the sentinel file in the workflow repo directory.
+   * Create sentinel files in the workflow repo directory.
    * This runs on the "driver" (not in a container), before tasks are scheduled.
    */
   new File("${workflow.projectDir}/assets").mkdirs()
-  def nf = new File(NO_FILE_PATH)
-  if( !nf.exists() ) {
-    nf.text = ""   // create empty file
+
+  def mkEmpty = { String p ->
+    def f = new File(p)
+    if( !f.exists() ) f.text = ""
+    return file(p, checkIfExists: true)
   }
-  NO_FILE = file(NO_FILE_PATH, checkIfExists: true)
+
+  NO_NORMAL_BAM  = mkEmpty(NO_NORMAL_BAM_PATH)
+  NO_NORMAL_BAI  = mkEmpty(NO_NORMAL_BAI_PATH)
+  NO_ALLELES_VCF = mkEmpty(NO_ALLELES_VCF_PATH)
+  NO_ALLELES_TBI = mkEmpty(NO_ALLELES_TBI_PATH)
 
   shards_ch = split_intervals(
     params.ref_fasta,
@@ -274,10 +288,10 @@ workflow {
   }
 
   // Choose real file if provided; else sentinel. Wrap with file(...) so Nextflow stages it.
-  normal_bam_val       = params.normal_reads         ? file(params.normal_reads)          : NO_FILE
-  normal_bai_val       = params.normal_reads_index   ? file(params.normal_reads_index)    : NO_FILE
-  alleles_vcf_val      = params.force_call_file      ? file(params.force_call_file)       : NO_FILE
-  alleles_vcf_tbi_val  = params.force_call_file_index? file(params.force_call_file_index) : NO_FILE
+  normal_bam_val      = params.normal_reads          ? file(params.normal_reads)          : NO_NORMAL_BAM
+  normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index)    : NO_NORMAL_BAI
+  alleles_vcf_val     = params.force_call_file       ? file(params.force_call_file)       : NO_ALLELES_VCF
+  alleles_vcf_tbi_val = params.force_call_file_index ? file(params.force_call_file_index) : NO_ALLELES_TBI
 
   mutect_res = mutect_wrapper(
     base_inputs,
