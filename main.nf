@@ -140,13 +140,35 @@ process mutect_wrapper {
   ls -lah
 
   # --- tumor sample name (SM tag) ---
-  tumor_sample=$(samtools view -H "$tumor_bam" \
+  tumor_samples=$(samtools view -H "$tumor_bam" \
     | awk -F'\t' '/^@RG/ { for (i=1;i<=NF;i++) if ($i ~ /^SM:/) { sub(/^SM:/,"",$i); print $i } }' \
     | sort -u)
 
-  [[ -n "$tumor_sample" ]] || { echo "ERROR: No SM tag found in tumor BAM header" >&2; exit 1; }
-  [[ $(echo "$tumor_sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values found in tumor BAM header:" >&2; echo "$tumor_sample" >&2; exit 1; }
-  echo "Detected tumor sample: $tumor_sample"
+  [[ -n "$tumor_samples" ]] || { echo "ERROR: No SM tag found in tumor BAM header" >&2; exit 1; }
+
+  tumor_sample_count=$(echo "$tumor_samples" | wc -l | tr -d ' ')
+  if [[ "$tumor_sample_count" -eq 1 ]]; then
+    tumor_sample="$tumor_samples"
+  else
+    echo "WARN: Multiple SM values found in tumor BAM header:" >&2
+    echo "$tumor_samples" >&2
+
+    # Optional override: if user supplies extra_args like: --tumor-sample-name <SM>
+    # Or you can wire a real Nextflow param (recommended) - see note below.
+    preferred="!{params.tumor_sample_name ?: ''}"
+
+    if [[ -n "$preferred" ]] && echo "$tumor_samples" | grep -Fxq "$preferred"; then
+      tumor_sample="$preferred"
+      echo "Using user-specified tumor_sample_name: $tumor_sample"
+    else
+      # deterministic fallback: pick first in sorted list
+      tumor_sample="$(echo "$tumor_samples" | head -n 1)"
+      echo "Using first tumor SM (fallback): $tumor_sample"
+    fi
+  fi
+
+  echo "Detected tumor sample used for Mutect2: $tumor_sample"
+
 
   # --- normal sample (if provided; sentinel name == NO_NORMAL_BAM) ---
   normal_args=""
