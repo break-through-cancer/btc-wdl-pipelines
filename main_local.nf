@@ -50,7 +50,7 @@ process split_intervals {
     val  scatter_count
 
   output:
-    path "scattered/*.intervals", emit: shards
+    path "scattered/*", emit: shards
 
   script:
   """
