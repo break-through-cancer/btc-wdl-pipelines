@@ -46,7 +46,7 @@ def main():
 
     # Simple rule: PBMC = normal, everything else = tumor
     for sample, files in bam_map.items():
-        if "PBMC" in sample.upper():
+        if "PBMC" in sample.upper(): # switch on the sample type column "Status"
             normal_bam = files["bam"]
             normal_bai = files["bai"]
         else:

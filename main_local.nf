@@ -248,7 +248,7 @@ process gather_vcfs {
   echo "PWD=\$(pwd)"
   ls -lah
 
-  find . -maxdepth 1 -type f -name '*.vcf.gz' -print | sort > vcfs.list
+  find -L . -maxdepth 1 -type f -name '*.vcf.gz' -print | sort > vcfs.list
   echo "VCFs found: \$(wc -l < vcfs.list)"
 
   sed -E 's/.*out\\.([0-9]+).*/\\1\\t&/' vcfs.list | sort -k1,1n | cut -f2- > vcfs.sorted.list
