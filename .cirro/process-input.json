@@ -17,6 +17,6 @@
     "gnomad_version": "2.1",
     "minimum_allele_frequency": "0.0",
     "mem_gb": "8",
-    "disk_space_gb": "32",
+    "disk_space_gb": "16",
     "boot_disk_size_gb": "16"
 }
