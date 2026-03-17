@@ -52,6 +52,7 @@ def main():
         else:
             tumor_bam = files["bam"]
             tumor_bai = files["bai"]
+            tumor_sample_name = str(sample)
 
     if not tumor_bam:
         raise ValueError("No tumor BAM found")
@@ -59,6 +60,7 @@ def main():
     # Always set tumor
     ds.add_param("tumor_reads", tumor_bam)
     ds.add_param("tumor_reads_index", tumor_bai)
+    ds.add_param("tumor_sample_name", tumor_sample_name)
 
     # Only set normal if present
     if normal_bam:
