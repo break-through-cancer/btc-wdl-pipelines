@@ -356,25 +356,23 @@ workflow {
     params.scatter_count as int
   )
 
-  prep.out.manifest.view()
-  
-  manifest_rows = (
-    prep.out.manifest
-      .map { it }   // force channel context
-      .splitCsv(header: true, sep: '\t')
-      .map { row ->
-        tuple(
-          row.shard_base,
-          file(row.bam),
-          file(row.bai),
-          file(row.interval),
-          file(params.ref_fasta),
-          file(params.ref_fai),
-          file(params.ref_dict),
-          file(params.germline_resource)
-        )
-      }
-)
+  // prep.out.manifest.view()
+
+  manifest_rows = Channel
+    .from(prep.out.manifest)
+    .splitCsv(header: true, sep: '\t')
+    .map { row ->
+      tuple(
+        row.shard_base,
+        file(row.bam),
+        file(row.bai),
+        file(row.interval),
+        file(params.ref_fasta),
+        file(params.ref_fai),
+        file(params.ref_dict),
+        file(params.germline_resource)
+      )
+    }
 
 
 
