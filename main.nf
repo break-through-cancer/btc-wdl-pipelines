@@ -355,21 +355,30 @@ workflow {
     file(params.intervals),
     params.scatter_count as int
   )
-  
-  interval_ch = prep.out.interval_shards
-    .flatten()
-    .map { f -> tuple(f.baseName, f) }
 
-  bam_ch = prep.out.shard_bams
-    .flatten()
-    .map { f -> tuple(f.baseName, f) }
+  interval_files = prep.out.interval_shards
+  bam_files      = prep.out.shard_bams
+  bai_files      = prep.out.shard_bais
+  interval_ch = (
+    interval_files
+      .flatten()
+      .map { f -> tuple(f.baseName, f) }
+  )
 
-  bai_ch = prep.out.shard_bais
-    .flatten()
-    .map { f ->
-      def key = f.name.replaceFirst(/\\.bam\\.bai$/, '')
-      tuple(key, f)
-    }
+  bam_ch = (
+    bam_files
+      .flatten()
+      .map { f -> tuple(f.baseName, f) }
+  )
+
+  bai_ch = (
+    bai_files
+      .flatten()
+      .map { f ->
+        def key = f.name.replaceFirst(/\\.bam\\.bai$/, '')
+        tuple(key, f)
+      }
+  )
 
   mutect_inputs = bam_ch
     .join(bai_ch)
