@@ -358,21 +358,24 @@ workflow {
 
   // prep.out.manifest.view()
 
-  manifest_rows = Channel
-    .from(prep.out.manifest)
-    .splitCsv(header: true, sep: '\t')
-    .map { row ->
-      tuple(
-        row.shard_base,
-        file(row.bam),
-        file(row.bai),
-        file(row.interval),
-        file(params.ref_fasta),
-        file(params.ref_fai),
-        file(params.ref_dict),
-        file(params.germline_resource)
-      )
-    }
+  manifest_rows = prep.out.manifest
+  .map { manifest ->
+    manifest.readLines()
+      .drop(1)   // skip header
+      .collect { line ->
+        def toks = line.split('\t')
+        tuple(
+          toks[0],                  // shard_base
+          file(toks[2]),            // bam
+          file(toks[3]),            // bai
+          file(toks[1]),            // interval
+          file(params.ref_fasta),
+          file(params.ref_fai),
+          file(params.ref_dict),
+          file(params.germline_resource)
+        )
+      }
+  }.flatten()
 
 
 
