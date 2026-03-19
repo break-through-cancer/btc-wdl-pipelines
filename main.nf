@@ -355,21 +355,23 @@ workflow {
     file(params.intervals),
     params.scatter_count as int
   )
-  
-  manifest_rows = prep.out.manifest
-  .splitCsv(header: true, sep: '\t')
-  .map { row ->
-    tuple(
-      row.shard_base,
-      file(row.bam),
-      file(row.bai),
-      file(row.interval),
-      file(params.ref_fasta),
-      file(params.ref_fai),
-      file(params.ref_dict),
-      file(params.germline_resource)
-    )
-  }
+
+  manifest_rows = (
+    prep.out.manifest
+      .splitCsv(header: true, sep: '\t')
+      .map { row ->
+        tuple(
+          row.shard_base,
+          file(row.bam),
+          file(row.bai),
+          file(row.interval),
+          file(params.ref_fasta),
+          file(params.ref_fai),
+          file(params.ref_dict),
+          file(params.germline_resource)
+        )
+      }
+)
 
 
   normal_bam_val      = params.normal_reads          ? file(params.normal_reads)          : NO_NORMAL_BAM
