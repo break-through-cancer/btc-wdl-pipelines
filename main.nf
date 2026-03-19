@@ -38,11 +38,60 @@ def NO_ALLELES_TBI = null
  * split_intervals
  * --------------------------------------------
  */
-process split_intervals {
+// process split_intervals {
+//   label 'process_medium'
+//   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+
+//   input:
+//     path ref_fasta
+//     path ref_fai
+//     path ref_dict
+//     path intervals
+//     val  scatter_count
+
+//   output:
+//     path "scattered/*.intervals", emit: shards
+
+//   script:
+//   """
+//   set -euo pipefail
+//   echo "=== split_intervals: START ==="
+//   echo "PWD=\$(pwd)"
+//   ls -lah
+
+//   mkdir -p scattered
+
+//   gatk --java-options "-Xmx8g -XX:-UsePerfData" BedToIntervalList \\
+//     -I "$intervals" \\
+//     -SD "$ref_dict" \\
+//     -O regions.interval_list
+
+//   gatk --java-options "-Xmx8g -XX:-UsePerfData" SplitIntervals \\
+//     -R "$ref_fasta" \\
+//     -L regions.interval_list \\
+//     --scatter "$scatter_count" \\
+//     -O scattered
+
+
+//   echo "=== split_intervals: END ==="
+//   """
+// }
+
+/**
+ * --------------------------------------------
+ * do view to subset the bed file and stuff, matched up bed and bam files 
+ * keep prefixes from the splitintervals bam 
+* 
+ * --------------------------------------------
+ */
+
+process prepare_shards_and_subset_tumor {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
+    path tumor_bam
+    path tumor_bam_index
     path ref_fasta
     path ref_fai
     path ref_dict
@@ -50,32 +99,66 @@ process split_intervals {
     val  scatter_count
 
   output:
-    path "scattered/*.intervals", emit: shards
+    path "shards/*.intervals", emit: interval_shards
+    path "shards/*.bam", emit: shard_bams
+    path "shards/*.bam.bai", emit: shard_bais
+    path "shards/manifest.tsv", emit: manifest
 
   script:
   """
   set -euo pipefail
-  echo "=== split_intervals: START ==="
+
+  echo "=== prepare_shards_and_subset_tumor: START ==="
   echo "PWD=\$(pwd)"
   ls -lah
 
   mkdir -p scattered
+  mkdir -p shards
+  mkdir -p beds
 
+  # Convert BED -> interval_list for GATK SplitIntervals
   gatk --java-options "-Xmx8g -XX:-UsePerfData" BedToIntervalList \\
     -I "$intervals" \\
     -SD "$ref_dict" \\
     -O regions.interval_list
 
+  # Split intervals into shard files
   gatk --java-options "-Xmx8g -XX:-UsePerfData" SplitIntervals \\
     -R "$ref_fasta" \\
     -L regions.interval_list \\
     --scatter "$scatter_count" \\
     -O scattered
 
-  echo "=== split_intervals: END ==="
+  # Build one small BAM per shard and keep matching prefixes
+  : > shards/manifest.tsv
+  echo -e "shard_base\\tinterval\\tbam\\tbai" >> shards/manifest.tsv
+
+  for interval_file in scattered/*.intervals; do
+    shard_base=\$(basename "\$interval_file" .intervals)
+
+    cp "\$interval_file" "shards/\${shard_base}.intervals"
+
+    # Convert GATK interval_list -> BED for samtools
+    awk 'BEGIN{OFS="\\t"} !/^@/ {print \$1, \$2-1, \$3}' "\$interval_file" > "beds/\${shard_base}.bed"
+
+    samtools view \\
+      -b \\
+      -L "beds/\${shard_base}.bed" \\
+      -o "shards/\${shard_base}.bam" \\
+      "$tumor_bam"
+
+    samtools index "shards/\${shard_base}.bam"
+
+    echo -e "\${shard_base}\\tshards/\${shard_base}.intervals\\tshards/\${shard_base}.bam\\tshards/\${shard_base}.bam.bai" >> shards/manifest.tsv
+  done
+
+  echo "=== shard outputs ==="
+  ls -lah shards
+  echo "=== manifest ==="
+  cat shards/manifest.tsv
+  echo "=== prepare_shards_and_subset_tumor: END ==="
   """
 }
-
 /*
  * --------------------------------------------
  * mutect_wrapper (NO optional inputs; uses sentinel files)
@@ -114,6 +197,7 @@ process mutect_wrapper {
   set -euo pipefail
 
   # Bind Nextflow inputs to bash vars (shell: does NOT auto-export them)
+  shard_base="!{shard_base}"
   tumor_bam="!{tumor_bam}"
   tumor_bam_index="!{tumor_bam_index}"
   interval_shard="!{interval_shard}"
@@ -121,7 +205,6 @@ process mutect_wrapper {
   ref_fai="!{ref_fai}"
   ref_dict="!{ref_dict}"
   germline_resource="!{germline_resource}"
-
   normal_bam="!{normal_bam}"
   normal_bam_index="!{normal_bam_index}"
   alleles_vcf="!{alleles_vcf}"
@@ -178,7 +261,6 @@ process mutect_wrapper {
   fi
   test -s "${germline_resource}.tbi"
 
-  shard_base=$(basename "$interval_shard" .intervals)
   out_prefix="out.${shard_base}"
 
   echo "=== mutect_wrapper: RUN Mutect2 ==="
@@ -264,34 +346,44 @@ workflow {
   NO_ALLELES_VCF = mkEmpty(NO_ALLELES_VCF_PATH)
   NO_ALLELES_TBI = mkEmpty(NO_ALLELES_TBI_PATH)
 
-  shards_ch = split_intervals(
-    params.ref_fasta,
-    params.ref_fai,
-    params.ref_dict,
-    params.intervals,
-    params.scatter_count as int
-  ).shards.flatten()
+  interval_ch = prep.out.interval_shards
+    .flatten()
+    .map { f -> tuple(f.baseName, f) }
 
-  base_inputs = shards_ch.map { shard ->
-    tuple(
-      params.tumor_reads,
-      params.tumor_reads_index,
-      shard,
-      params.ref_fasta,
-      params.ref_fai,
-      params.ref_dict,
-      params.germline_resource
-    )
-  }
+  bam_ch = prep.out.shard_bams
+    .flatten()
+    .map { f -> tuple(f.baseName, f) }
 
-  // Choose real file if provided; else sentinel. Wrap with file(...) so Nextflow stages it.
+  bai_ch = prep.out.shard_bais
+    .flatten()
+    .map { f ->
+      def key = f.name.replaceFirst(/\\.bam\\.bai$/, '')
+      tuple(key, f)
+    }
+
+  mutect_inputs = bam_ch
+    .join(bai_ch)
+    .join(interval_ch)
+    .map { key, bam, bai, interval ->
+      tuple(
+        key,
+        bam,
+        bai,
+        interval,
+        file(params.ref_fasta),
+        file(params.ref_fai),
+        file(params.ref_dict),
+        file(params.germline_resource)
+      )
+    }
+
   normal_bam_val      = params.normal_reads          ? file(params.normal_reads)          : NO_NORMAL_BAM
   normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index)    : NO_NORMAL_BAI
   alleles_vcf_val     = params.force_call_file       ? file(params.force_call_file)       : NO_ALLELES_VCF
   alleles_vcf_tbi_val = params.force_call_file_index ? file(params.force_call_file_index) : NO_ALLELES_TBI
 
   mutect_res = mutect_wrapper(
-    base_inputs,
+    mutect_inputs,
     Channel.value(normal_bam_val),
     Channel.value(normal_bai_val),
     Channel.value(alleles_vcf_val),
