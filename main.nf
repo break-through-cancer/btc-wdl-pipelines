@@ -356,8 +356,11 @@ workflow {
     params.scatter_count as int
   )
 
+  prep.out.manifest.view()
+  
   manifest_rows = (
     prep.out.manifest
+      .map { it }   // force channel context
       .splitCsv(header: true, sep: '\t')
       .map { row ->
         tuple(
@@ -372,6 +375,7 @@ workflow {
         )
       }
 )
+
 
 
   normal_bam_val      = params.normal_reads          ? file(params.normal_reads)          : NO_NORMAL_BAM
