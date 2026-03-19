@@ -346,55 +346,21 @@ workflow {
   NO_ALLELES_VCF = mkEmpty(NO_ALLELES_VCF_PATH)
   NO_ALLELES_TBI = mkEmpty(NO_ALLELES_TBI_PATH)
 
-  prep = prepare_shards_and_subset_tumor(
-    file(params.tumor_reads),
-    file(params.tumor_reads_index),
-    file(params.ref_fasta),
-    file(params.ref_fai),
-    file(params.ref_dict),
-    file(params.intervals),
-    params.scatter_count as int
-  )
+  manifest_rows = prep.out.manifest
+  .splitCsv(header: true, sep: '\t')
+  .map { row ->
+    tuple(
+      row.shard_base,
+      file(row.bam),
+      file(row.bai),
+      file(row.interval),
+      file(params.ref_fasta),
+      file(params.ref_fai),
+      file(params.ref_dict),
+      file(params.germline_resource)
+    )
+  }
 
-  interval_files = prep.out.interval_shards
-  bam_files      = prep.out.shard_bams
-  bai_files      = prep.out.shard_bais
-  interval_ch = (
-    interval_files
-      .flatten()
-      .map { f -> tuple(f.baseName, f) }
-  )
-
-  bam_ch = (
-    bam_files
-      .flatten()
-      .map { f -> tuple(f.baseName, f) }
-  )
-
-  bai_ch = (
-    bai_files
-      .flatten()
-      .map { f ->
-        def key = f.name.replaceFirst(/\\.bam\\.bai$/, '')
-        tuple(key, f)
-      }
-  )
-
-  mutect_inputs = bam_ch
-    .join(bai_ch)
-    .join(interval_ch)
-    .map { key, bam, bai, interval ->
-      tuple(
-        key,
-        bam,
-        bai,
-        interval,
-        file(params.ref_fasta),
-        file(params.ref_fai),
-        file(params.ref_dict),
-        file(params.germline_resource)
-      )
-    }
 
   normal_bam_val      = params.normal_reads          ? file(params.normal_reads)          : NO_NORMAL_BAM
   normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index)    : NO_NORMAL_BAI
@@ -402,7 +368,7 @@ workflow {
   alleles_vcf_tbi_val = params.force_call_file_index ? file(params.force_call_file_index) : NO_ALLELES_TBI
 
   mutect_res = mutect_wrapper(
-    mutect_inputs,
+    manifest_rows,
     Channel.value(normal_bam_val),
     Channel.value(normal_bai_val),
     Channel.value(alleles_vcf_val),
