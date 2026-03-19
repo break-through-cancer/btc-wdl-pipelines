@@ -346,6 +346,16 @@ workflow {
   NO_ALLELES_VCF = mkEmpty(NO_ALLELES_VCF_PATH)
   NO_ALLELES_TBI = mkEmpty(NO_ALLELES_TBI_PATH)
 
+  prep = prepare_shards_and_subset_tumor(
+    file(params.tumor_reads),
+    file(params.tumor_reads_index),
+    file(params.ref_fasta),
+    file(params.ref_fai),
+    file(params.ref_dict),
+    file(params.intervals),
+    params.scatter_count as int
+  )
+  
   interval_ch = prep.out.interval_shards
     .flatten()
     .map { f -> tuple(f.baseName, f) }
