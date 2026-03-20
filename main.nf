@@ -118,17 +118,14 @@ process subset_tumor_per_shard {
     tuple path(interval_shard), path(tumor_bam), path(tumor_bam_index)
 
   output:
-    tuple path("*.bam"), path("*.bam.bai"), path("*.intervals")
-
+    tuple path("*.bam"), path("*.bam.bai"), path(interval_shard)
   shell:
   '''
   set -euo pipefail
 
   shard_base=$(basename "!{interval_shard}" .intervals)
 
-  # keep a staged copy with the expected output name
-  ln -s "!{interval_shard}" "${shard_base}.intervals"
-
+  # just use the interval directly — no cp, no ln
   awk 'BEGIN{OFS="\t"} !/^@/ {print $1, $2-1, $3}' "!{interval_shard}" > "${shard_base}.bed"
 
   samtools view \
