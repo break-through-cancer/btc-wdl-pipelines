@@ -316,12 +316,14 @@ workflow {
     params.scatter_count as int
   )
 
-  shard_input_ch = interval_res.interval_shards.map { interval_file ->
-    tuple(
-      interval_file,
-      file(params.tumor_reads),
-      file(params.tumor_reads_index)
-    )
+  shard_input_ch = interval_res.interval_shards
+    .flatten()
+    .map { interval_file ->
+      tuple(
+        interval_file,
+        file(params.tumor_reads, checkIfExists: true),
+        file(params.tumor_reads_index, checkIfExists: true)
+      )
   }
 
   shard_res = subset_tumor_per_shard(shard_input_ch)
