@@ -28,11 +28,6 @@ def NO_NORMAL_BAI_PATH   = "${workflow.projectDir}/assets/NO_NORMAL_BAI"
 def NO_ALLELES_VCF_PATH  = "${workflow.projectDir}/assets/NO_ALLELES_VCF"
 def NO_ALLELES_TBI_PATH  = "${workflow.projectDir}/assets/NO_ALLELES_TBI"
 
-def NO_NORMAL_BAM  = null
-def NO_NORMAL_BAI  = null
-def NO_ALLELES_VCF = null
-def NO_ALLELES_TBI = null
-
 /*
  * --------------------------------------------
  * split_intervals
@@ -110,32 +105,43 @@ process split_intervals {
   """
 }
 
-process subset_tumor_per_shard {
-  label 'process_medium'
+/*
+ * Splits the tumor BAM into one sub-BAM per interval shard.
+ * Runs ONCE — all interval files are collected and passed together.
+ * Emits one tuple per shard: [shard_name, bam, bai, interval_file]
+ */
+process split_bam_by_intervals {
+  label 'process_high'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-    tuple path(interval_shard), path(tumor_bam), path(tumor_bam_index)
+    path tumor_bam
+    path tumor_bam_index
+    path interval_files  // collected list — all .intervals files staged into work dir
 
   output:
-    tuple path("*.bam"), path("*.bam.bai"), path(interval_shard)
-  shell:
-  '''
+    tuple path("shards/*.bam"), path("shards/*.bam.bai"), path("shards/*.intervals")
+
+  script:
+  """
   set -euo pipefail
+  mkdir -p shards
 
-  shard_base=$(basename "!{interval_shard}" .intervals)
+  for interval_file in *.intervals; do
+    shard_base=\$(basename "\$interval_file" .intervals)
 
-  # just use the interval directly — no cp, no ln
-  awk 'BEGIN{OFS="\t"} !/^@/ {print $1, $2-1, $3}' "!{interval_shard}" > "${shard_base}.bed"
+    awk 'BEGIN{OFS="\\t"} !/^@/ {print \$1, \$2-1, \$3}' "\$interval_file" > "\${shard_base}.bed"
 
-  samtools view \
-    -b \
-    -L "${shard_base}.bed" \
-    -o "${shard_base}.bam" \
-    "!{tumor_bam}"
+    samtools view -b -L "\${shard_base}.bed" \
+      -o "shards/\${shard_base}.bam" \
+      "$tumor_bam"
 
-  samtools index "${shard_base}.bam"
-  '''
+    samtools index "shards/\${shard_base}.bam"
+
+    # Copy the interval file into shards/ so it travels with its BAM
+    cp "\$interval_file" "shards/\${shard_base}.intervals"
+  done
+  """
 }
 /*
  * --------------------------------------------
@@ -314,34 +320,34 @@ workflow {
     params.scatter_count as int
   )
 
-  shard_input_ch = interval_res.interval_shards
-    .flatten()
-    .map { interval_file ->
+  // KEY CHANGE: collect() all interval shards so split_bam_by_intervals
+  // runs exactly ONCE with all intervals, producing all sub-BAMs in one job
+  shard_res = split_bam_by_intervals(
+    file(params.tumor_reads, checkIfExists: true),
+    file(params.tumor_reads_index, checkIfExists: true),
+    interval_res.interval_shards.collect()
+  )
+
+  // Fan out: each element of the tuple output is a list — transpose pairs them
+  // Result per element: [one_bam, one_bai, one_interval]
+  mutect_inputs_ch = shard_res
+    .transpose()
+    .map { bam, bai, interval ->
       tuple(
-        interval_file,
-        file(params.tumor_reads, checkIfExists: true),
-        file(params.tumor_reads_index, checkIfExists: true)
+        bam,
+        bai,
+        interval,
+        file(params.ref_fasta),
+        file(params.ref_fai),
+        file(params.ref_dict),
+        file(params.germline_resource)
       )
-  }
+    }
 
-  shard_res = subset_tumor_per_shard(shard_input_ch)
-
-  mutect_inputs_ch = shard_res.map { bam, bai, interval ->
-    tuple(
-      bam,
-      bai,
-      interval,
-      file(params.ref_fasta),
-      file(params.ref_fai),
-      file(params.ref_dict),
-      file(params.germline_resource)
-    )
-  }
-
-  normal_bam_val      = params.normal_reads          ? file(params.normal_reads, checkIfExists: true)          : NO_NORMAL_BAM
-  normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index, checkIfExists: true)    : NO_NORMAL_BAI
-  alleles_vcf_val     = params.force_call_file       ? file(params.force_call_file, checkIfExists: true)       : NO_ALLELES_VCF
-  alleles_vcf_tbi_val = params.force_call_file_index ? file(params.force_call_file_index, checkIfExists: true) : NO_ALLELES_TBI
+  normal_bam_val      = params.normal_reads          ? file(params.normal_reads, checkIfExists: true)          : file("NO_NORMAL_BAM")
+  normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index, checkIfExists: true)    : file("NO_NORMAL_BAI")
+  alleles_vcf_val     = params.force_call_file       ? file(params.force_call_file, checkIfExists: true)       : file("NO_ALLELES_VCF")
+  alleles_vcf_tbi_val = params.force_call_file_index ? file(params.force_call_file_index, checkIfExists: true) : file("NO_ALLELES_TBI")
 
   mutect_res = mutect_wrapper(
     mutect_inputs_ch,
