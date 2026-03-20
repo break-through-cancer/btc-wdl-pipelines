@@ -77,81 +77,65 @@ def NO_ALLELES_TBI = null
 //   """
 // }
 
-/**
- * --------------------------------------------
- * do view to subset the bed file and stuff, matched up bed and bam files 
- * keep prefixes from the splitintervals bam 
-* 
- * --------------------------------------------
- */
-process prepare_shards_and_subset_tumor {
+process split_intervals {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-    path tumor_bam
-    path tumor_bam_index
     path ref_fasta
-    path ref_fai
     path ref_dict
     path intervals
-    val  scatter_count
+    val scatter_count
 
   output:
-    path "shards/*.intervals", emit: interval_shards
-    path "shards/*.bam",       emit: shard_bams
-    path "shards/*.bam.bai",   emit: shard_bais
-    path "shards/manifest.tsv", emit: manifest
+    path "scattered/*.intervals", emit: interval_shards
 
   script:
   """
   set -euo pipefail
 
-  echo "=== prepare_shards_and_subset_tumor: START ==="
-  echo "PWD=\$(pwd)"
-  ls -lah
-
   mkdir -p scattered
-  mkdir -p shards
-  mkdir -p beds
 
-  gatk --java-options "-Xmx8g -XX:-UsePerfData" BedToIntervalList \\
-    -I "$intervals" \\
-    -SD "$ref_dict" \\
+  gatk --java-options "-Xmx8g -XX:-UsePerfData" BedToIntervalList \
+    -I "$intervals" \
+    -SD "$ref_dict" \
     -O regions.interval_list
 
-  gatk --java-options "-Xmx8g -XX:-UsePerfData" SplitIntervals \\
-    -R "$ref_fasta" \\
-    -L regions.interval_list \\
-    --scatter "$scatter_count" \\
+  gatk --java-options "-Xmx8g -XX:-UsePerfData" SplitIntervals \
+    -R "$ref_fasta" \
+    -L regions.interval_list \
+    --scatter "$scatter_count" \
     -O scattered
+  """
+}
 
-  : > shards/manifest.tsv
-  echo -e "shard_base\\tinterval\\tbam\\tbai" >> shards/manifest.tsv
+process subset_tumor_per_shard {
+  label 'process_medium'
+  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
-  for interval_file in scattered/*.intervals; do
-    shard_base=\$(basename "\$interval_file" .intervals)
+  input:
+    tuple path(interval_shard), path(tumor_bam), path(tumor_bam_index)
 
-    cp "\$interval_file" "shards/\${shard_base}.intervals"
+  output:
+    tuple path("*.bam"), path("*.bam.bai"), path("*.intervals")
 
-    awk 'BEGIN{OFS="\\t"} !/^@/ {print \$1, \$2-1, \$3}' "\$interval_file" > "beds/\${shard_base}.bed"
+  script:
+  """
+  set -euo pipefail
 
-    samtools view \\
-      -b \\
-      -L "beds/\${shard_base}.bed" \\
-      -o "shards/\${shard_base}.bam" \\
-      "$tumor_bam"
+  shard_base=$(basename "$interval_shard" .intervals)
 
-    samtools index "shards/\${shard_base}.bam"
+  cp "$interval_shard" "${shard_base}.intervals"
 
-    echo -e "\${shard_base}\\tshards/\${shard_base}.intervals\\tshards/\${shard_base}.bam\\tshards/\${shard_base}.bam.bai" >> shards/manifest.tsv
-  done
+  awk 'BEGIN{OFS="\\t"} !/^@/ {print $1, $2-1, $3}' "$interval_shard" > "${shard_base}.bed"
 
-  echo "=== shard outputs ==="
-  ls -lah shards
-  echo "=== manifest ==="
-  cat shards/manifest.tsv
-  echo "=== prepare_shards_and_subset_tumor: END ==="
+  samtools view \
+    -b \
+    -L "${shard_base}.bed" \
+    -o "${shard_base}.bam" \
+    "$tumor_bam"
+
+  samtools index "${shard_base}.bam"
   """
 }
 /*
@@ -323,72 +307,34 @@ process gather_vcfs {
  */
 workflow {
 
-  /*
-   * Create sentinel files in the workflow repo directory.
-   * This runs on the "driver" (not in a container), before tasks are scheduled.
-   */
-  new File("${workflow.projectDir}/assets").mkdirs()
-
-  def mkEmpty = { String p ->
-    def f = new File(p)
-    if( !f.exists() ) f.text = ""
-    return file(p, checkIfExists: true)
-  }
-
-  NO_NORMAL_BAM  = mkEmpty(NO_NORMAL_BAM_PATH)
-  NO_NORMAL_BAI  = mkEmpty(NO_NORMAL_BAI_PATH)
-  NO_ALLELES_VCF = mkEmpty(NO_ALLELES_VCF_PATH)
-  NO_ALLELES_TBI = mkEmpty(NO_ALLELES_TBI_PATH)
-
-  prep = prepare_shards_and_subset_tumor(
-    file(params.tumor_reads),
-    file(params.tumor_reads_index),
+  interval_res = split_intervals(
     file(params.ref_fasta),
-    file(params.ref_fai),
     file(params.ref_dict),
     file(params.intervals),
     params.scatter_count as int
   )
 
-  // Debug if needed
-  // prep.out.manifest.view { "MANIFEST: $it" }
+  shard_input_ch = interval_res.interval_shards.map { interval_file ->
+    tuple(
+      interval_file,
+      file(params.tumor_reads),
+      file(params.tumor_reads_index)
+    )
+  }
 
-  manifest_rows = prep.out.manifest
-    .map { manifest ->
+  shard_res = subset_tumor_per_shard(shard_input_ch)
 
-      def baseDir = manifest.parent
-
-      manifest.text.readLines()
-        .drop(1)   // skip header
-        .collect { line ->
-          def toks = line.split('\t')
-          if( toks.size() < 4 ) {
-            error "Bad manifest line: ${line}"
-          }
-
-          def shard_base   = toks[0]
-          def interval_rel = toks[1]
-          def bam_rel      = toks[2]
-          def bai_rel      = toks[3]
-
-          tuple(
-            shard_base,
-            file("${baseDir}/${bam_rel}", checkIfExists: true),
-            file("${baseDir}/${bai_rel}", checkIfExists: true),
-            file("${baseDir}/${interval_rel}", checkIfExists: true),
-            file(params.ref_fasta, checkIfExists: true),
-            file(params.ref_fai, checkIfExists: true),
-            file(params.ref_dict, checkIfExists: true),
-            file(params.germline_resource, checkIfExists: true)
-          )
-        }
-    }
-    .flatten()
-
-  // Debug if needed
-  // manifest_rows.view { row ->
-  //   "ROW => shard=${row[0]} bam=${row[1].name} bai=${row[2].name} interval=${row[3].name}"
-  // }
+  mutect_inputs_ch = shard_res.map { bam, bai, interval ->
+    tuple(
+      bam,
+      bai,
+      interval,
+      file(params.ref_fasta),
+      file(params.ref_fai),
+      file(params.ref_dict),
+      file(params.germline_resource)
+    )
+  }
 
   normal_bam_val      = params.normal_reads          ? file(params.normal_reads, checkIfExists: true)          : NO_NORMAL_BAM
   normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index, checkIfExists: true)    : NO_NORMAL_BAI
@@ -396,17 +342,7 @@ workflow {
   alleles_vcf_tbi_val = params.force_call_file_index ? file(params.force_call_file_index, checkIfExists: true) : NO_ALLELES_TBI
 
   mutect_res = mutect_wrapper(
-    manifest_rows.map { shard_base, bam, bai, interval, ref_fasta, ref_fai, ref_dict, germline_resource ->
-      tuple(
-        bam,
-        bai,
-        interval,
-        ref_fasta,
-        ref_fai,
-        ref_dict,
-        germline_resource
-      )
-    },
+    mutect_inputs_ch,
     Channel.value(normal_bam_val),
     Channel.value(normal_bai_val),
     Channel.value(alleles_vcf_val),
@@ -414,11 +350,8 @@ workflow {
     params.m2_extra_args ?: ''
   )
 
-  mutect_res.vcf.view { "VCF: $it" }
-
   gather_vcfs(mutect_res.vcf.collect())
 }
-
 
                                                                                                            // /*
 //  * --------------------------------------------
