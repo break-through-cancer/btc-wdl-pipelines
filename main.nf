@@ -123,7 +123,7 @@ process subset_tumor_per_shard {
   """
   set -euo pipefail
 
-  shard_base=$(basename "$interval_shard" .intervals)
+  shard_base=\$(basename "\$interval_shard" .intervals)
 
   cp "$interval_shard" "${shard_base}.intervals"
 
