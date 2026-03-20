@@ -83,6 +83,7 @@ process split_intervals {
 
   input:
     path ref_fasta
+    path ref_fai
     path ref_dict
     path intervals
     val scatter_count
@@ -309,6 +310,7 @@ workflow {
 
   interval_res = split_intervals(
     file(params.ref_fasta),
+    file(params.ref_fai),
     file(params.ref_dict),
     file(params.intervals),
     params.scatter_count as int
