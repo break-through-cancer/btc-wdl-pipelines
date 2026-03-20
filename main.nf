@@ -126,7 +126,8 @@ process subset_tumor_per_shard {
 
   shard_base=$(basename "!{interval_shard}" .intervals)
 
-  cp "!{interval_shard}" "${shard_base}.intervals"
+  # keep a staged copy with the expected output name
+  ln -s "!{interval_shard}" "${shard_base}.intervals"
 
   awk 'BEGIN{OFS="\t"} !/^@/ {print $1, $2-1, $3}' "!{interval_shard}" > "${shard_base}.bed"
 
