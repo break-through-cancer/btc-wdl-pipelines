@@ -282,10 +282,12 @@ workflow {
     file(params.tumor_reads_index, checkIfExists: true)
   )
 
-  // Read the sample name file into a value channel
   tumor_sample_ch = sample_name_res.sample_name
-    .map { f -> f.text.trim() }
-    .tap { it -> log.info "Tumor sample name: ${it}" }
+  .map { f -> 
+    def s = f.text.trim()
+    log.info "Tumor sample name: ${s}"
+    s
+  }
 
   interval_res = split_intervals(
     file(params.ref_fasta),
