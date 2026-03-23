@@ -63,24 +63,63 @@ process split_intervals {
   """
 }
 
+/*
+ * Extract tumor sample name from BAM header once,
+ * so we don't need it as a param
+ */
+process get_tumor_sample_name {
+  label 'process_medium'
+  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+
+  input:
+    path tumor_bam
+    path tumor_bam_index
+
+  output:
+    path "tumor_sample_name.txt", emit: sample_name
+
+  script:
+  """
+  set -euo pipefail
+
+  echo "=== get_tumor_sample_name: START ==="
+  echo "tumor_bam=$tumor_bam"
+
+  sample=\$(samtools view -H "$tumor_bam" \
+    | awk -F'\t' '/^@RG/ { for (i=1;i<=NF;i++) if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i } }' \
+    | sort -u)
+
+  echo "Detected sample name: \${sample}"
+
+  [[ -n "\$sample" ]] || { echo "ERROR: No SM tag found in BAM header" >&2; exit 1; }
+  [[ \$(echo "\$sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values in BAM header:" >&2; echo "\$sample" >&2; exit 1; }
+
+  echo "\$sample" > tumor_sample_name.txt
+  echo "=== get_tumor_sample_name: END ==="
+  """
+}
+
 process mutect_wrapper {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
   stageInMode 'symlink'
 
   input:
-    path interval_shard
-    path tumor_bam
-    path tumor_bam_index
-    path ref_fasta
-    path ref_fai
-    path ref_dict
-    path germline_resource
+    tuple(
+      path(interval_shard),
+      path(tumor_bam),
+      path(tumor_bam_index),
+      path(ref_fasta),
+      path(ref_fai),
+      path(ref_dict),
+      path(germline_resource)
+    )
     path normal_bam
     path normal_bam_index
     path alleles_vcf
     path alleles_vcf_tbi
-    val extra_args
+    val  tumor_sample
+    val  extra_args
 
   output:
     path "*.vcf.gz",     emit: vcf
@@ -103,6 +142,7 @@ process mutect_wrapper {
   normal_bam_index="!{normal_bam_index}"
   alleles_vcf="!{alleles_vcf}"
   alleles_vcf_tbi="!{alleles_vcf_tbi}"
+  tumor_sample="!{tumor_sample}"
   extra_args="!{extra_args}"
 
   heap_mb="!{ Math.min(task.memory ? (task.memory.mega * 0.8).intValue() : 3072, 24000) }"
@@ -116,14 +156,13 @@ process mutect_wrapper {
   echo "germline_resource=${germline_resource}"
   echo "normal_bam=${normal_bam}"
   echo "alleles_vcf=${alleles_vcf}"
+  echo "tumor_sample=${tumor_sample}"
   echo "heap_mb=${heap_mb}M"
   echo "extra_args='${extra_args}'"
   echo "Staged files:"
   ls -lah
 
-  tumor_sample="!{params.tumor_sample_name ?: ''}"
-  [[ -n "$tumor_sample" ]] || { echo "ERROR: tumor_sample_name not provided" >&2; exit 1; }
-  echo "tumor_sample=${tumor_sample}"
+  [[ -n "$tumor_sample" ]] || { echo "ERROR: tumor_sample is empty" >&2; exit 1; }
 
   # --- normal sample ---
   normal_args=""
@@ -231,12 +270,22 @@ workflow {
 
   log.info "=== WORKFLOW START ==="
   log.info "tumor_reads       : ${params.tumor_reads}"
-  log.info "tumor_sample_name : ${params.tumor_sample_name}"
   log.info "scatter_count     : ${params.scatter_count}"
   log.info "normal_reads      : ${params.normal_reads ?: 'NOT PROVIDED (tumor-only)'}"
   log.info "force_call_file   : ${params.force_call_file ?: 'NOT PROVIDED'}"
   log.info "m2_extra_args     : ${params.m2_extra_args ?: 'NONE'}"
   log.info "gatk_docker       : ${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0 (default)'}"
+
+  // Extract tumor sample name from BAM header — no param needed
+  sample_name_res = get_tumor_sample_name(
+    file(params.tumor_reads, checkIfExists: true),
+    file(params.tumor_reads_index, checkIfExists: true)
+  )
+
+  // Read the sample name file into a value channel
+  tumor_sample_ch = sample_name_res.sample_name
+    .map { f -> f.text.trim() }
+    .tap { it -> log.info "Tumor sample name: ${it}" }
 
   interval_res = split_intervals(
     file(params.ref_fasta),
@@ -260,11 +309,10 @@ workflow {
   log.info "alleles_vcf_val   : ${alleles_vcf_val}"
 
   // Fan out one Mutect2 job per interval shard
-  // tumor BAM is symlinked (not copied) into each job's work dir
+  // tumor BAM is symlinked (not copied) into each job's work dir via stageInMode
   mutect_inputs_ch = interval_res.interval_shards
     .flatten()
     .map { interval ->
-      log.info "Queuing Mutect2 for shard: ${interval.name}"
       tuple(
         interval,
         file(params.tumor_reads, checkIfExists: true),
@@ -277,17 +325,12 @@ workflow {
     }
 
   mutect_res = mutect_wrapper(
-    mutect_inputs_ch.map { it[0] },  // interval_shard
-    mutect_inputs_ch.map { it[1] },  // tumor_bam
-    mutect_inputs_ch.map { it[2] },  // tumor_bam_index
-    mutect_inputs_ch.map { it[3] },  // ref_fasta
-    mutect_inputs_ch.map { it[4] },  // ref_fai
-    mutect_inputs_ch.map { it[5] },  // ref_dict
-    mutect_inputs_ch.map { it[6] },  // germline_resource
+    mutect_inputs_ch,
     Channel.value(normal_bam_val),
     Channel.value(normal_bai_val),
     Channel.value(alleles_vcf_val),
     Channel.value(alleles_vcf_tbi_val),
+    tumor_sample_ch,
     params.m2_extra_args ?: ''
   )
 
