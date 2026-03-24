@@ -9,6 +9,8 @@ def NO_NORMAL_BAI_PATH   = "${workflow.projectDir}/assets/NO_NORMAL_BAI"
 def NO_ALLELES_VCF_PATH  = "${workflow.projectDir}/assets/NO_ALLELES_VCF"
 def NO_ALLELES_TBI_PATH  = "${workflow.projectDir}/assets/NO_ALLELES_TBI"
 
+if( !params.containsKey('tumor_sample') )
+  params.tumor_sample = null
 
 if( !params.containsKey('m2_extra_args') )
   params.m2_extra_args = ''
@@ -73,37 +75,37 @@ process split_intervals {
  * Extract tumor sample name from BAM header once,
  * so we don't need it as a param
  */
-process get_tumor_sample_name {
-  label 'process_medium'
-  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+// process get_tumor_sample_name {
+//   label 'process_medium'
+//   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
-  input:
-    path tumor_bam
-    path tumor_bam_index
+//   input:
+//     path tumor_bam
+//     path tumor_bam_index
 
-  output:
-    path "tumor_sample_name.txt", emit: sample_name
+//   output:
+//     path "tumor_sample_name.txt", emit: sample_name
 
-  script:
-  """
-  set -euo pipefail
+//   script:
+//   """
+//   set -euo pipefail
 
-  echo "=== get_tumor_sample_name: START ==="
-  echo "tumor_bam=$tumor_bam"
+//   echo "=== get_tumor_sample_name: START ==="
+//   echo "tumor_bam=$tumor_bam"
 
-  sample=\$(samtools view -H "$tumor_bam" \
-    | awk -F'\t' '/^@RG/ { for (i=1;i<=NF;i++) if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i } }' \
-    | sort -u)
+//   sample=\$(samtools view -H "$tumor_bam" \
+//     | awk -F'\t' '/^@RG/ { for (i=1;i<=NF;i++) if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i } }' \
+//     | sort -u)
 
-  echo "Detected sample name: \${sample}"
+//   echo "Detected sample name: \${sample}"
 
-  [[ -n "\$sample" ]] || { echo "ERROR: No SM tag found in BAM header" >&2; exit 1; }
-  [[ \$(echo "\$sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values in BAM header:" >&2; echo "\$sample" >&2; exit 1; }
+//   [[ -n "\$sample" ]] || { echo "ERROR: No SM tag found in BAM header" >&2; exit 1; }
+//   [[ \$(echo "\$sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values in BAM header:" >&2; echo "\$sample" >&2; exit 1; }
 
-  echo "\$sample" > tumor_sample_name.txt
-  echo "=== get_tumor_sample_name: END ==="
-  """
-}
+//   echo "\$sample" > tumor_sample_name.txt
+//   echo "=== get_tumor_sample_name: END ==="
+//   """
+// }
 
 process mutect_wrapper {
   label 'process_medium'
@@ -283,17 +285,17 @@ workflow {
   log.info "gatk_docker       : ${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0 (default)'}"
 
   // Extract tumor sample name from BAM header — no param needed
-  sample_name_res = get_tumor_sample_name(
-    file(params.tumor_reads, checkIfExists: true),
-    file(params.tumor_reads_index, checkIfExists: true)
-  )
+  // sample_name_res = get_tumor_sample_name(
+  //   file(params.tumor_reads, checkIfExists: true),
+  //   file(params.tumor_reads_index, checkIfExists: true)
+  // )
 
-  tumor_sample_ch = sample_name_res.sample_name
-  .map { f -> 
-    def s = f.text.trim()
-    log.info "Tumor sample name: ${s}"
-    s
-  }
+  // tumor_sample_ch = sample_name_res.sample_name
+  // .map { f -> 
+  //   def s = f.text.trim()
+  //   log.info "Tumor sample name: ${s}"
+  //   s
+  // }
 
   interval_res = split_intervals(
     file(params.ref_fasta),
@@ -316,6 +318,13 @@ workflow {
 
   log.info "normal_bam_val    : ${normal_bam_val}"
   log.info "alleles_vcf_val   : ${alleles_vcf_val}"
+
+  if( !params.tumor_sample ) {
+    error "Missing required --tumor_sample"
+  }
+
+  log.info "tumor_sample      : ${params.tumor_sample}"
+
   // Fan out one Mutect2 job per interval shard
   // tumor BAM is symlinked (not copied) into each job's work dir via stageInMode
   mutect_inputs_ch = interval_res.interval_shards
@@ -338,7 +347,7 @@ workflow {
     Channel.value(normal_bai_val),
     Channel.value(alleles_vcf_val),
     Channel.value(alleles_vcf_tbi_val),
-    tumor_sample_ch,
+    Channel.value(params.tumor_sample),
     params.m2_extra_args ?: ''
   )
 

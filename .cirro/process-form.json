@@ -15,7 +15,11 @@
         "type": "integer",
         "default": 50
       },
-      
+      "tumor_sample": {
+        "title": "tumor sample",
+        "description": "sample name",
+        "type": "string"
+      },
       "germline_resource": {
         "title": "germline resource",
         "description": "",
@@ -67,7 +71,8 @@
     },
     "required": [
         "gatk_docker",
-        "scatter_count"
+        "scatter_count",
+        "tumor_sample"
 
     ]
   },
