@@ -114,11 +114,10 @@ process split_bam_by_intervals {
     count=\$((count + 1))
     echo "--- Shard \${count}/\${total}: \${shard_base} ---"
 
-    awk '!/^@/ { 
-      split($1, a, /:|-/); 
-      print a[1]"\t"(a[2]-1)"\t"a[3] 
-    }' "$interval_file" > "${shard_base}.bed"
-    echo "  BED file created: \$(wc -l < \${shard_base}.bed) regions"
+    awk '!/^@/ {
+      split(\$1, a, /:|-/);
+      print a[1]"\t"(a[2]-1)"\t"a[3]
+    }' "\$interval_file" > "\${shard_base}.bed"
 
     samtools view -b -L "\${shard_base}.bed" \
       -o "shards/\${shard_base}.bam" \
