@@ -1,7 +1,7 @@
 import json
 import pandas as pd
 from cirro.helpers.preprocess_dataset import PreprocessDataset
-
+import pysam
 
 def extract_bams(ds):
     df = ds.files.copy()
@@ -36,6 +36,17 @@ def main():
 
     print("=== ds.files preview ===")
     print(ds.files.head(20).to_string(index=False))
+
+    bam_path = ds.files[ds.files['file'].str.endswith('.bam')]['file'].iloc[0]
+
+    with pysam.AlignmentFile(bam_path, 'rb', check_sq=False) as bam:
+        rg_samples = list({rg['SM'] for rg in bam.header.to_dict().get('RG', [])})
+
+    assert len(rg_samples) == 1, f"Expected 1 SM tag, got: {rg_samples}"
+    tumor_sample = rg_samples[0]
+
+    ds.add_param('tumor_sample', tumor_sample)
+
 
     bam_map = extract_bams(ds)
 

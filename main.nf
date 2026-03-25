@@ -77,41 +77,68 @@ process split_intervals {
   """
 }
 
-/*
- * Extract tumor sample name from BAM header once,
- * so we don't need it as a param
- */
-// process get_tumor_sample_name {
-//   label 'process_medium'
-//   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
-//   input:
-//     path tumor_bam
-//     path tumor_bam_index
+process split_bam_by_intervals {
+  label 'process_high'
+  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
-//   output:
-//     path "tumor_sample_name.txt", emit: sample_name
+  input:
+    path tumor_bam
+    path tumor_bam_index
+    path interval_files
 
-//   script:
-//   """
-//   set -euo pipefail
+  output:
+    path "shards/*.bam",       emit: bams
+    path "shards/*.bam.bai",   emit: bais
+    path "shards/*.intervals", emit: intervals
 
-//   echo "=== get_tumor_sample_name: START ==="
-//   echo "tumor_bam=$tumor_bam"
+  script:
+  """
+  set -euo pipefail
 
-//   sample=\$(samtools view -H "$tumor_bam" \
-//     | awk -F'\t' '/^@RG/ { for (i=1;i<=NF;i++) if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i } }' \
-//     | sort -u)
+  echo "=== split_bam_by_intervals: START ==="
+  echo "PWD=\$(pwd)"
+  echo "tumor_bam=$tumor_bam"
+  echo "tumor_bam_index=$tumor_bam_index"
+  echo "Interval files staged:"
+  ls -lah *.intervals | head -20
+  echo "Total interval files: \$(ls *.intervals | wc -l)"
+  ls -lah
+  mkdir -p shards
 
-//   echo "Detected sample name: \${sample}"
+  total=\$(ls *.intervals | wc -l)
+  count=0
 
-//   [[ -n "\$sample" ]] || { echo "ERROR: No SM tag found in BAM header" >&2; exit 1; }
-//   [[ \$(echo "\$sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values in BAM header:" >&2; echo "\$sample" >&2; exit 1; }
+  for interval_file in *.intervals; do
+    shard_base=\$(basename "\$interval_file" .intervals)
+    count=\$((count + 1))
+    echo "--- Shard \${count}/\${total}: \${shard_base} ---"
 
-//   echo "\$sample" > tumor_sample_name.txt
-//   echo "=== get_tumor_sample_name: END ==="
-//   """
-// }
+    awk '!/^@/ { 
+      split($1, a, /:|-/); 
+      print a[1]"\t"(a[2]-1)"\t"a[3] 
+    }' "$interval_file" > "${shard_base}.bed"
+    echo "  BED file created: \$(wc -l < \${shard_base}.bed) regions"
+
+    samtools view -b -L "\${shard_base}.bed" \
+      -o "shards/\${shard_base}.bam" \
+      "$tumor_bam"
+    echo "  BAM written: \$(ls -lah shards/\${shard_base}.bam | awk '{print \$5}')"
+
+    samtools index "shards/\${shard_base}.bam"
+    echo "  BAM indexed"
+
+    cp "\$interval_file" "shards/\${shard_base}.intervals"
+    echo "  Interval copied"
+  done
+
+  echo "=== split_bam_by_intervals: DONE ==="
+  echo "Final shards directory:"
+  ls -lah shards/
+  echo "Total BAMs: \$(ls shards/*.bam | wc -l)"
+  """
+}
+
 
 process mutect_wrapper {
   label 'process_medium'
@@ -311,6 +338,12 @@ workflow {
     params.scatter_count as int
   )
 
+  shard_res = split_bam_by_intervals(
+    file(params.tumor_reads, checkIfExists: true),
+    file(params.tumor_reads_index, checkIfExists: true),
+    interval_res.interval_shards.collect()
+  )
+
   // interval_res.interval_shards
   //   .flatten()
   //   .count()
@@ -332,14 +365,25 @@ workflow {
   log.info "tumor_sample      : ${params.tumor_sample}"
 
   // Fan out one Mutect2 job per interval shard
-  // tumor BAM is symlinked (not copied) into each job's work dir via stageInMode
-  mutect_inputs_ch = interval_res.interval_shards
-    .flatten()
-    .map { interval ->
+
+  bams_ch = shard_res.bams.flatten()
+  .map { bam -> tuple(bam.name.replace('.bam', ''), bam) }
+
+  bais_ch = shard_res.bais.flatten()
+    .map { bai -> tuple(bai.name.replace('.bam.bai', ''), bai) }
+
+  intervals_ch = shard_res.intervals.flatten()
+    .map { interval -> tuple(interval.name.replace('.intervals', ''), interval) }
+
+  mutect_inputs_ch = bams_ch
+    .join(bais_ch)
+    .join(intervals_ch)
+    .map { key, bam, bai, interval ->
+      println "Preparing Mutect2 shard: ${key}"
       tuple(
         interval,
-        file(params.tumor_reads, checkIfExists: true),
-        file(params.tumor_reads_index, checkIfExists: true),
+        bam,
+        bai,
         file(params.ref_fasta),
         file(params.ref_fai),
         file(params.ref_dict),
