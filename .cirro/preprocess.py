@@ -1,7 +1,8 @@
+import cmd
 import json
 import pandas as pd
 from cirro.helpers.preprocess_dataset import PreprocessDataset
-import pysam
+import subprocess
 
 def extract_bams(ds):
     df = ds.files.copy()
@@ -39,11 +40,20 @@ def main():
 
     bam_path = ds.files[ds.files['file'].str.endswith('.bam')]['file'].iloc[0]
 
-    with pysam.AlignmentFile(bam_path, 'rb', check_sq=False) as bam:
-        rg_samples = list({rg['SM'] for rg in bam.header.to_dict().get('RG', [])})
+    cmd = f"samtools view -H {bam_path}"
+    header = subprocess.check_output(cmd, shell=True, text=True)
 
-    assert len(rg_samples) == 1, f"Expected 1 SM tag, got: {rg_samples}"
-    tumor_sample = rg_samples[0]
+    samples = set()
+    for line in header.splitlines():
+        if line.startswith("@RG"):
+            for field in line.split("\t"):
+                if field.startswith("SM:"):
+                    samples.add(field.replace("SM:", ""))
+
+    if len(samples) != 1:
+        raise ValueError(f"Expected 1 SM tag, got: {samples}")
+
+    tumor_sample = list(samples)[0]
 
     ds.add_param('tumor_sample', tumor_sample)
 
