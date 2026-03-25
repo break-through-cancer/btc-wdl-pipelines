@@ -127,7 +127,7 @@ process subset_tumor_per_shard {
     cp "\$interval_file" "shards/\${shard_base}.intervals"
 
     awk '!/^@/ {
-      split(\\$1, a, /:|-/);
+      split(\$1, a, /:|-/);
       print a[1]"\\t"(a[2]-1)"\\t"a[3]
     }' "\$interval_file" > "\${shard_base}.bed"
 
