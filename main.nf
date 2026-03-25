@@ -86,7 +86,10 @@ process subset_tumor_per_shard {
     path interval_files
 
   output:
-    tuple val(meta), path("shards/*"), path("tumor_sample_name.txt")
+    path "shards/*.bam", emit: shard_bams
+    path "shards/*.bam.bai", emit: shard_bais
+    path "shards/*.intervals", emit: shard_intervals
+    path "tumor_sample_name.txt", emit: tumor_sample
 
   script:
   """
@@ -117,7 +120,8 @@ process subset_tumor_per_shard {
   total=\$(ls -1 *.intervals | wc -l)
   count=0
 
-  for interval_file in *.intervals; do
+  for interval_file in ${interval_files}; do
+  
     shard_base=\$(basename "\$interval_file" .intervals)
     count=\$((count + 1))
     echo "--- Shard \${count}/\${total}: \${shard_base} ---"
@@ -396,9 +400,12 @@ workflow {
 
   // localize full tumor BAM once, extract tumor sample once, create shard BAMs once
   subset_res = subset_tumor_per_shard(
-    interval_res.interval_shards.flatten().collect(),
-    file(params.tumor_reads, checkIfExists: true),
-    file(params.tumor_reads_index, checkIfExists: true)
+    Channel.of([
+      [id: 'tumor'],
+      file(params.tumor_reads, checkIfExists: true),
+      file(params.tumor_reads_index, checkIfExists: true)
+    ]),
+    interval_res.interval_shards.collect()
   )
 
   tumor_sample_ch = subset_res.tumor_sample
@@ -410,17 +417,15 @@ workflow {
       return s
     }
 
-  shard_bams_ch = subset_res.shard_files
-    .filter { f -> f.name.endsWith('.bam') && !f.name.endsWith('.bam.bai') }
-    .map { f -> tuple(f.name.replaceFirst(/\\.bam$/, ''), f) }
+  shard_bams_ch = subset_res.shard_bams
+    .map { f -> tuple(f.name.replaceFirst(/\.bam$/, ''), f) }
 
-  shard_bais_ch = subset_res.shard_files
-    .filter { f -> f.name.endsWith('.bam.bai') }
-    .map { f -> tuple(f.name.replaceFirst(/\\.bam\\.bai$/, ''), f) }
+  shard_bais_ch = subset_res.shard_bais
+    .map { f -> tuple(f.name.replaceFirst(/\.bam\.bai$/, ''), f) }
 
-  shard_intervals_ch = subset_res.shard_files
-    .filter { f -> f.name.endsWith('.intervals') }
-    .map { f -> tuple(f.name.replaceFirst(/\\.intervals$/, ''), f) }
+  shard_intervals_ch = subset_res.shard_intervals
+    .map { f -> tuple(f.name.replaceFirst(/\.intervals$/, ''), f) }
+
 
   mutect_inputs_ch = shard_bams_ch
     .join(shard_bais_ch)
