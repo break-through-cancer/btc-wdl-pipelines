@@ -311,10 +311,10 @@ workflow {
     .view { n -> "=== split_intervals produced ${n} shards ===" }
 
 
-  normal_bam_val      = params.normal_reads          ? file(params.normal_reads, checkIfExists: true)          : file("NO_NORMAL_BAM")
-  normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index, checkIfExists: true)    : file("NO_NORMAL_BAI")
-  alleles_vcf_val     = params.force_call_file       ? file(params.force_call_file, checkIfExists: true)       : file("NO_ALLELES_VCF")
-  alleles_vcf_tbi_val = params.force_call_file_index ? file(params.force_call_file_index, checkIfExists: true) : file("NO_ALLELES_TBI")
+  normal_bam_val      = params.normal_reads          ? file(params.normal_reads, checkIfExists: true)          : file(NO_NORMAL_BAM_PATH, checkIfExists: true)
+  normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index, checkIfExists: true)    : file(NO_NORMAL_BAI_PATH, checkIfExists: true)
+  alleles_vcf_val     = params.force_call_file       ? file(params.force_call_file, checkIfExists: true)       : file(NO_ALLELES_VCF_PATH, checkIfExists: true)
+  alleles_vcf_tbi_val = params.force_call_file_index ? file(params.force_call_file_index, checkIfExists: true) : file(NO_ALLELES_TBI_PATH, checkIfExists: true)
 
   log.info "normal_bam_val    : ${normal_bam_val}"
   log.info "alleles_vcf_val   : ${alleles_vcf_val}"
