@@ -103,7 +103,7 @@ process subset_tumor_per_shard {
   tumor_sample=\$(samtools view -H "$tumor_bam" \\
     | awk -F'\\t' '/^@RG/ {
         for (i=1;i<=NF;i++)
-          if (\\$i ~ /^SM:/) {
+          if (\$i ~ /^SM:/) {
             sub(/^SM:/,"",\$i)
             print \$i
           }
