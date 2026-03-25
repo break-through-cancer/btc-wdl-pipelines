@@ -9,6 +9,12 @@ def NO_NORMAL_BAI_PATH   = "${workflow.projectDir}/assets/NO_NORMAL_BAI"
 def NO_ALLELES_VCF_PATH  = "${workflow.projectDir}/assets/NO_ALLELES_VCF"
 def NO_ALLELES_TBI_PATH  = "${workflow.projectDir}/assets/NO_ALLELES_TBI"
 
+new File("${workflow.projectDir}/assets").mkdirs()
+new File(NO_NORMAL_BAM_PATH).createNewFile()
+new File(NO_NORMAL_BAI_PATH).createNewFile()
+new File(NO_ALLELES_VCF_PATH).createNewFile()
+new File(NO_ALLELES_TBI_PATH).createNewFile()
+
 if( !params.containsKey('tumor_sample') )
   params.tumor_sample = null
 
@@ -305,10 +311,10 @@ workflow {
     params.scatter_count as int
   )
 
-  interval_res.interval_shards
-    .flatten()
-    .count()
-    .view { n -> "=== split_intervals produced ${n} shards ===" }
+  // interval_res.interval_shards
+  //   .flatten()
+  //   .count()
+  //   .view { n -> "=== split_intervals produced ${n} shards ===" }
 
 
   normal_bam_val      = params.normal_reads          ? file(params.normal_reads, checkIfExists: true)          : file(NO_NORMAL_BAM_PATH, checkIfExists: true)
