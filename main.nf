@@ -104,8 +104,8 @@ process subset_tumor_per_shard {
     | awk -F'\\t' '/^@RG/ {
         for (i=1;i<=NF;i++)
           if (\\$i ~ /^SM:/) {
-            sub(/^SM:/,"",\\$i)
-            print \\$i
+            sub(/^SM:/,"",\$i)
+            print \$i
           }
       }' \\
     | sort -u)
