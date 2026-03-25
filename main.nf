@@ -77,36 +77,46 @@ process split_intervals {
   """
 }
 
-
-process split_bam_by_intervals {
-  label 'process_high'
+process subset_tumor_per_shard {
+  label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
+    path interval_files
     path tumor_bam
     path tumor_bam_index
-    path interval_files
 
   output:
-    path "shards/*.bam",       emit: bams
-    path "shards/*.bam.bai",   emit: bais
-    path "shards/*.intervals", emit: intervals
+    path "shards/*", emit: shard_files
+    path "tumor_sample_name.txt", emit: tumor_sample
 
   script:
   """
   set -euo pipefail
 
-  echo "=== split_bam_by_intervals: START ==="
-  echo "PWD=\$(pwd)"
-  echo "tumor_bam=$tumor_bam"
-  echo "tumor_bam_index=$tumor_bam_index"
-  echo "Interval files staged:"
-  ls -lah *.intervals | head -20
-  echo "Total interval files: \$(ls *.intervals | wc -l)"
-  ls -lah
   mkdir -p shards
 
-  total=\$(ls *.intervals | wc -l)
+  echo "=== subset_tumor_per_shard: START ==="
+  echo "tumor_bam=\$tumor_bam"
+  echo "tumor_bam_index=\$tumor_bam_index"
+
+  tumor_sample=\$(samtools view -H "$tumor_bam" \\
+    | awk -F'\\t' '/^@RG/ {
+        for (i=1;i<=NF;i++)
+          if (\\$i ~ /^SM:/) {
+            sub(/^SM:/,"",\\$i)
+            print \\$i
+          }
+      }' \\
+    | sort -u)
+
+  [[ -n "\$tumor_sample" ]] || { echo "ERROR: No SM tag found in tumor BAM header" >&2; exit 1; }
+  [[ \$(echo "\$tumor_sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values in tumor BAM header: \$tumor_sample" >&2; exit 1; }
+
+  echo "\$tumor_sample" > tumor_sample_name.txt
+  echo "tumor_sample=\$tumor_sample"
+
+  total=\$(ls -1 *.intervals | wc -l)
   count=0
 
   for interval_file in *.intervals; do
@@ -114,29 +124,84 @@ process split_bam_by_intervals {
     count=\$((count + 1))
     echo "--- Shard \${count}/\${total}: \${shard_base} ---"
 
+    cp "\$interval_file" "shards/\${shard_base}.intervals"
+
     awk '!/^@/ {
-      split(\$1, a, /:|-/);
-      print a[1]"\t"(a[2]-1)"\t"a[3]
+      split(\\$1, a, /:|-/);
+      print a[1]"\\t"(a[2]-1)"\\t"a[3]
     }' "\$interval_file" > "\${shard_base}.bed"
 
-    samtools view -b -L "\${shard_base}.bed" \
-      -o "shards/\${shard_base}.bam" \
+    samtools view -b -L "\${shard_base}.bed" \\
+      -o "shards/\${shard_base}.bam" \\
       "$tumor_bam"
-    echo "  BAM written: \$(ls -lah shards/\${shard_base}.bam | awk '{print \$5}')"
 
     samtools index "shards/\${shard_base}.bam"
-    echo "  BAM indexed"
-
-    cp "\$interval_file" "shards/\${shard_base}.intervals"
-    echo "  Interval copied"
   done
 
-  echo "=== split_bam_by_intervals: DONE ==="
-  echo "Final shards directory:"
-  ls -lah shards/
-  echo "Total BAMs: \$(ls shards/*.bam | wc -l)"
+  echo "=== subset_tumor_per_shard: END ==="
+  ls -lah shards
   """
 }
+
+// process split_bam_by_intervals {
+//   label 'process_high'
+//   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+
+//   input:
+//     path tumor_bam
+//     path tumor_bam_index
+//     path interval_files
+
+//   output:
+//     path "shards/*.bam",       emit: bams
+//     path "shards/*.bam.bai",   emit: bais
+//     path "shards/*.intervals", emit: intervals
+
+//   script:
+//   """
+//   set -euo pipefail
+
+//   echo "=== split_bam_by_intervals: START ==="
+//   echo "PWD=\$(pwd)"
+//   echo "tumor_bam=$tumor_bam"
+//   echo "tumor_bam_index=$tumor_bam_index"
+//   echo "Interval files staged:"
+//   ls -lah *.intervals | head -20
+//   echo "Total interval files: \$(ls *.intervals | wc -l)"
+//   ls -lah
+//   mkdir -p shards
+
+//   total=\$(ls *.intervals | wc -l)
+//   count=0
+
+//   for interval_file in *.intervals; do
+//     shard_base=\$(basename "\$interval_file" .intervals)
+//     count=\$((count + 1))
+//     echo "--- Shard \${count}/\${total}: \${shard_base} ---"
+
+//     awk '!/^@/ {
+//       split(\$1, a, /:|-/);
+//       print a[1]"\t"(a[2]-1)"\t"a[3]
+//     }' "\$interval_file" > "\${shard_base}.bed"
+
+//     samtools view -b -L "\${shard_base}.bed" \
+//       -o "shards/\${shard_base}.bam" \
+//       "$tumor_bam"
+//     echo "  BAM written: \$(ls -lah shards/\${shard_base}.bam | awk '{print \$5}')"
+
+//     samtools index "shards/\${shard_base}.bam"
+//     echo "  BAM indexed"
+
+//     cp "\$interval_file" "shards/\${shard_base}.intervals"
+//     echo "  Interval copied"
+//   done
+
+//   echo "=== split_bam_by_intervals: DONE ==="
+//   echo "Final shards directory:"
+//   ls -lah shards/
+//   echo "Total BAMs: \$(ls shards/*.bam | wc -l)"
+//   """
+// }
 
 
 process mutect_wrapper {
@@ -305,7 +370,6 @@ process gather_vcfs {
   echo "=== gather_vcfs: END ==="
   """
 }
-
 workflow {
 
   log.info "=== WORKFLOW START ==="
@@ -316,38 +380,13 @@ workflow {
   log.info "m2_extra_args     : ${params.m2_extra_args ?: 'NONE'}"
   log.info "gatk_docker       : ${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0 (default)'}"
 
-  // Extract tumor sample name from BAM header — no param needed
-  // sample_name_res = get_tumor_sample_name(
-  //   file(params.tumor_reads, checkIfExists: true),
-  //   file(params.tumor_reads_index, checkIfExists: true)
-  // )
-
-  // tumor_sample_ch = sample_name_res.sample_name
-  // .map { f -> 
-  //   def s = f.text.trim()
-  //   log.info "Tumor sample name: ${s}"
-  //   s
-  // }
-
   interval_res = split_intervals(
-    file(params.ref_fasta),
-    file(params.ref_fai),
-    file(params.ref_dict),
-    file(params.intervals),
+    file(params.ref_fasta, checkIfExists: true),
+    file(params.ref_fai, checkIfExists: true),
+    file(params.ref_dict, checkIfExists: true),
+    file(params.intervals, checkIfExists: true),
     params.scatter_count as int
   )
-
-  shard_res = split_bam_by_intervals(
-    file(params.tumor_reads, checkIfExists: true),
-    file(params.tumor_reads_index, checkIfExists: true),
-    interval_res.interval_shards.collect()
-  )
-
-  // interval_res.interval_shards
-  //   .flatten()
-  //   .count()
-  //   .view { n -> "=== split_intervals produced ${n} shards ===" }
-
 
   normal_bam_val      = params.normal_reads          ? file(params.normal_reads, checkIfExists: true)          : file(NO_NORMAL_BAM_PATH, checkIfExists: true)
   normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index, checkIfExists: true)    : file(NO_NORMAL_BAI_PATH, checkIfExists: true)
@@ -357,36 +396,47 @@ workflow {
   log.info "normal_bam_val    : ${normal_bam_val}"
   log.info "alleles_vcf_val   : ${alleles_vcf_val}"
 
-  if( !params.tumor_sample ) {
-    error "Missing required --tumor_sample"
-  }
+  // localize full tumor BAM once, extract tumor sample once, create shard BAMs once
+  subset_res = subset_tumor_per_shard(
+    interval_res.interval_shards.flatten().collect(),
+    file(params.tumor_reads, checkIfExists: true),
+    file(params.tumor_reads_index, checkIfExists: true)
+  )
 
-  log.info "tumor_sample      : ${params.tumor_sample}"
+  tumor_sample_ch = subset_res.tumor_sample
+    .map { f ->
+      def s = f.text.trim()
+      if( !s )
+        error "Could not extract tumor sample name from tumor BAM header"
+      log.info "Tumor sample name: ${s}"
+      return s
+    }
 
-  // Fan out one Mutect2 job per interval shard
+  shard_bams_ch = subset_res.shard_files
+    .filter { f -> f.name.endsWith('.bam') && !f.name.endsWith('.bam.bai') }
+    .map { f -> tuple(f.name.replaceFirst(/\\.bam$/, ''), f) }
 
-  bams_ch = shard_res.bams.flatten()
-  .map { bam -> tuple(bam.name.replace('.bam', ''), bam) }
+  shard_bais_ch = subset_res.shard_files
+    .filter { f -> f.name.endsWith('.bam.bai') }
+    .map { f -> tuple(f.name.replaceFirst(/\\.bam\\.bai$/, ''), f) }
 
-  bais_ch = shard_res.bais.flatten()
-    .map { bai -> tuple(bai.name.replace('.bam.bai', ''), bai) }
+  shard_intervals_ch = subset_res.shard_files
+    .filter { f -> f.name.endsWith('.intervals') }
+    .map { f -> tuple(f.name.replaceFirst(/\\.intervals$/, ''), f) }
 
-  intervals_ch = shard_res.intervals.flatten()
-    .map { interval -> tuple(interval.name.replace('.intervals', ''), interval) }
-
-  mutect_inputs_ch = bams_ch
-    .join(bais_ch)
-    .join(intervals_ch)
-    .map { key, bam, bai, interval ->
-      println "Preparing Mutect2 shard: ${key}"
+  mutect_inputs_ch = shard_bams_ch
+    .join(shard_bais_ch)
+    .map { base, bam, bai -> tuple(base, bam, bai) }
+    .join(shard_intervals_ch)
+    .map { base, bam, bai, interval ->
       tuple(
         interval,
         bam,
         bai,
-        file(params.ref_fasta),
-        file(params.ref_fai),
-        file(params.ref_dict),
-        file(params.germline_resource)
+        file(params.ref_fasta, checkIfExists: true),
+        file(params.ref_fai, checkIfExists: true),
+        file(params.ref_dict, checkIfExists: true),
+        file(params.germline_resource, checkIfExists: true)
       )
     }
 
@@ -396,13 +446,9 @@ workflow {
     Channel.value(normal_bai_val),
     Channel.value(alleles_vcf_val),
     Channel.value(alleles_vcf_tbi_val),
-    Channel.value(params.tumor_sample),
+    tumor_sample_ch,
     params.m2_extra_args ?: ''
   )
-
-  mutect_res.vcf
-    .count()
-    .view { n -> "=== mutect_wrapper finished: ${n} VCFs produced ===" }
 
   gather_vcfs(mutect_res.vcf.collect())
 
