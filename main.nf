@@ -78,17 +78,15 @@ process split_intervals {
 }
 
 process subset_tumor_per_shard {
-  label 'process_medium'
-  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+  tag "${meta.id}"
+  container "${params.gatk_docker}"
 
   input:
+    tuple val(meta), path(tumor_bam), path(tumor_bam_index)
     path interval_files
-    path tumor_bam
-    path tumor_bam_index
 
   output:
-    path "shards/*", emit: shard_files
-    path "tumor_sample_name.txt", emit: tumor_sample
+    tuple val(meta), path("shards/*"), path("tumor_sample_name.txt")
 
   script:
   """
@@ -97,10 +95,10 @@ process subset_tumor_per_shard {
   mkdir -p shards
 
   echo "=== subset_tumor_per_shard: START ==="
-  echo "tumor_bam=\$tumor_bam"
-  echo "tumor_bam_index=\$tumor_bam_index"
+  echo "tumor_bam=${tumor_bam}"
+  echo "tumor_bam_index=${tumor_bam_index}"
 
-  tumor_sample=\$(samtools view -H "$tumor_bam" \\
+  tumor_sample=\$(samtools view -H "${tumor_bam}" \\
     | awk -F'\\t' '/^@RG/ {
         for (i=1;i<=NF;i++)
           if (\$i ~ /^SM:/) {
@@ -133,7 +131,7 @@ process subset_tumor_per_shard {
 
     samtools view -b -L "\${shard_base}.bed" \\
       -o "shards/\${shard_base}.bam" \\
-      "$tumor_bam"
+      "${tumor_bam}"
 
     samtools index "shards/\${shard_base}.bam"
   done
