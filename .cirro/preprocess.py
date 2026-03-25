@@ -2,8 +2,6 @@ import cmd
 import json
 import pandas as pd
 from cirro.helpers.preprocess_dataset import PreprocessDataset
-import subprocess
-
 def extract_bams(ds):
     df = ds.files.copy()
     df["file"] = df["file"].astype(str)
@@ -40,22 +38,22 @@ def main():
 
     bam_path = ds.files[ds.files['file'].str.endswith('.bam')]['file'].iloc[0]
 
-    cmd = f"samtools view -H {bam_path}"
-    header = subprocess.check_output(cmd, shell=True, text=True)
+    # cmd = f"samtools view -H {bam_path}"
+    # header = subprocess.check_output(cmd, shell=True, text=True)
 
-    samples = set()
-    for line in header.splitlines():
-        if line.startswith("@RG"):
-            for field in line.split("\t"):
-                if field.startswith("SM:"):
-                    samples.add(field.replace("SM:", ""))
+    # samples = set()
+    # for line in header.splitlines():
+    #     if line.startswith("@RG"):
+    #         for field in line.split("\t"):
+    #             if field.startswith("SM:"):
+    #                 samples.add(field.replace("SM:", ""))
 
-    if len(samples) != 1:
-        raise ValueError(f"Expected 1 SM tag, got: {samples}")
+    # if len(samples) != 1:
+    #     raise ValueError(f"Expected 1 SM tag, got: {samples}")
 
-    tumor_sample = list(samples)[0]
+    # tumor_sample = list(samples)[0]
 
-    ds.add_param('tumor_sample', tumor_sample)
+    # ds.add_param('tumor_sample', tumor_sample)
 
 
     bam_map = extract_bams(ds)
