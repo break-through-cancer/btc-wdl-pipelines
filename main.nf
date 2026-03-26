@@ -81,8 +81,6 @@ process subset_tumor_per_shard {
   tag "${meta.id}"
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
-  cpus 4
-  memory '32 GB'
 
   input:
     tuple val(meta), path(tumor_bam), path(tumor_bam_index)
@@ -433,7 +431,7 @@ workflow {
       return s
     }
     .first()
-    
+
   shard_bams_ch = subset_res.shard_bams
     .map { f -> tuple(f.name.replaceFirst(/\.bam$/, ''), f) }
 
