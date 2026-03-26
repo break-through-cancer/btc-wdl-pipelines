@@ -79,7 +79,10 @@ process split_intervals {
 
 process subset_tumor_per_shard {
   tag "${meta.id}"
-  container "${params.gatk_docker}"
+  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+
+  cpus 4
+  memory '32 GB'
 
   input:
     tuple val(meta), path(tumor_bam), path(tumor_bam_index)
@@ -100,6 +103,7 @@ process subset_tumor_per_shard {
   echo "=== subset_tumor_per_shard: START ==="
   echo "tumor_bam=${tumor_bam}"
   echo "tumor_bam_index=${tumor_bam_index}"
+  echo "cpus=${task.cpus}"
 
   tumor_sample=\$(samtools view -H "${tumor_bam}" \\
     | awk -F'\\t' '/^@RG/ {
@@ -117,28 +121,40 @@ process subset_tumor_per_shard {
   echo "\$tumor_sample" > tumor_sample_name.txt
   echo "tumor_sample=\$tumor_sample"
 
-  total=\$(ls -1 *.intervals | wc -l)
-  count=0
+  max_jobs=${task.cpus}
+  running=0
 
   for interval_file in ${interval_files}; do
-  
-    shard_base=\$(basename "\$interval_file" .intervals)
-    count=\$((count + 1))
-    echo "--- Shard \${count}/\${total}: \${shard_base} ---"
+    (
+      set -euo pipefail
 
-    cp "\$interval_file" "shards/\${shard_base}.intervals"
+      shard_base=\$(basename "\$interval_file" .intervals)
+      echo "--- START shard: \${shard_base} ---"
 
-    awk '!/^@/ {
-      split(\$1, a, /:|-/);
-      print a[1]"\\t"(a[2]-1)"\\t"a[3]
-    }' "\$interval_file" > "\${shard_base}.bed"
+      cp "\$interval_file" "shards/\${shard_base}.intervals"
 
-    samtools view -b -L "\${shard_base}.bed" \\
-      -o "shards/\${shard_base}.bam" \\
-      "${tumor_bam}"
+      awk '!/^@/ {
+        split(\$1, a, /:|-/);
+        print a[1]"\\t"(a[2]-1)"\\t"a[3]
+      }' "\$interval_file" > "\${shard_base}.bed"
 
-    samtools index "shards/\${shard_base}.bam"
+      samtools view -@ 1 -b -L "\${shard_base}.bed" \\
+        -o "shards/\${shard_base}.bam" \\
+        "${tumor_bam}"
+
+      samtools index -@ 1 "shards/\${shard_base}.bam"
+
+      echo "--- DONE shard: \${shard_base} ---"
+    ) &
+
+    running=\$((running + 1))
+    if (( running >= max_jobs )); then
+      wait -n
+      running=\$((running - 1))
+    fi
   done
+
+  wait
 
   echo "=== subset_tumor_per_shard: END ==="
   ls -lah shards
@@ -416,7 +432,8 @@ workflow {
       log.info "Tumor sample name: ${s}"
       return s
     }
-
+    .first()
+    
   shard_bams_ch = subset_res.shard_bams
     .map { f -> tuple(f.name.replaceFirst(/\.bam$/, ''), f) }
 
