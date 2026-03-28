@@ -393,16 +393,18 @@ process subset_tumor_per_shard {
   echo "shards/ write OK"
 
   echo "--- parsing regions ---"
-  grep -v '^@' "\$interval_file" > /tmp/regions.txt
+  grep -v '^@' "\$interval_file" | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' > /tmp/regions.txt
   echo "region line count=\$(wc -l < /tmp/regions.txt)"
   cat /tmp/regions.txt
 
   echo "--- running samtools view ---"
+  readarray -t regions < /tmp/regions.txt
+
   samtools view \\
     -b \\
-    -o shards/test.bam \\
+    -o shards/\${shard_base}.bam \\
     "${tumor_bam}" \\
-    \$(cat /tmp/regions.txt | head -1)
+    "\${regions[@]}"
 
   echo "samtools exit=\$?"
   ls -lh shards/test.bam
