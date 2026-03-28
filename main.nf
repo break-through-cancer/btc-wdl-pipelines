@@ -396,7 +396,10 @@ process subset_tumor_per_shard {
       cp "\$interval_file" "shards/\${shard_base}.intervals"
 
       # Convert GATK interval format to samtools region args (skip @ header lines)
-      mapfile -t regions < <(grep -v '^@' "\$interval_file")
+      regions=()
+      while IFS= read -r line; do
+        regions+=("\$line")
+      done < <(grep -v '^@' "\$interval_file")
 
       echo "region_count=\${#regions[@]}"
       echo "first_region=\${regions[0]:-NONE}"
