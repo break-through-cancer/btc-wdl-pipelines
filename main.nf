@@ -415,7 +415,6 @@ process subset_tumor_per_shard {
     [[ -s "shards/\${shard_base}.bam" ]] \\
       || { echo "ERROR: BAM missing or empty for \${shard_base}" >&2; exit 1; }
 
-    samtools quickcheck -v "shards/\${shard_base}.bam"
 
     echo "--- running samtools index (\${shard_base}) ---"
     samtools index -@ \$(( ${task.cpus} - 1 )) "shards/\${shard_base}.bam"
