@@ -340,8 +340,8 @@ process split_intervals {
 
 process subset_tumor_per_shard {
   tag "${meta.id}"
-  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
   cache false
+  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
     tuple val(meta), path(tumor_bam), path(tumor_bam_index)
@@ -359,13 +359,11 @@ process subset_tumor_per_shard {
   set -euo pipefail
   mkdir -p shards
 
-  echo "=== START ===" ; date
+  echo "=== subset_tumor_per_shard: START ===" ; date
   echo "tumor_bam=${tumor_bam}"
   echo "cpus=${task.cpus}"
-  echo "PWD=\$(pwd)"
-  echo "df: \$(df -h . 2>&1 || true)"
-  echo "ls work dir: \$(ls -lah . 2>&1 || true)"
 
+  # ── Extract sample name ──────────────────────────────────────────────────────
   tumor_sample=\$(samtools view -H "${tumor_bam}" \\
     | awk -F'\\t' '/^@RG/ {
         for (i=1;i<=NF;i++)
@@ -373,43 +371,87 @@ process subset_tumor_per_shard {
       }' | sort -u)
 
   [[ -n "\$tumor_sample" ]] \\
-    || { echo "ERROR: No SM tag" >&2; exit 1; }
+    || { echo "ERROR: No SM tag in tumor BAM header" >&2; exit 1; }
+  [[ \$(echo "\$tumor_sample" | wc -l) -eq 1 ]] \\
+    || { echo "ERROR: Multiple SM values: \$tumor_sample" >&2; exit 1; }
 
   echo "\$tumor_sample" > tumor_sample_name.txt
   echo "tumor_sample=\$tumor_sample"
 
   total=\$(ls -1 *.intervals | wc -l)
-  echo "total shards=\$total"
+  echo "total interval shards=\$total"
 
-  # Just test the very first shard, no loop, no log redirect
-  interval_file=\$(ls *.intervals | head -1)
-  echo "testing with: \$interval_file"
-  echo "interval contents:"
-  cat "\$interval_file"
+  shard_num=0
+  failed=0
 
-  echo "--- writing test file to shards/ ---"
-  echo "test" > shards/test.txt
-  cat shards/test.txt
-  echo "shards/ write OK"
+  for interval_file in *.intervals; do
+    shard_num=\$(( shard_num + 1 ))
+    shard_base=\$(basename "\$interval_file" .intervals)
+    log_file="shards/\${shard_base}.log"
 
-  echo "--- parsing regions ---"
-  grep -v '^@' "\$interval_file" | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' > /tmp/regions.txt
-  echo "region line count=\$(wc -l < /tmp/regions.txt)"
-  cat /tmp/regions.txt
+    echo "--- processing shard \${shard_num}/\${total}: \${shard_base} ---"
 
-  echo "--- running samtools view ---"
-  readarray -t regions < /tmp/regions.txt
+    {
+      echo "=== shard \${shard_base}: START ===" ; date
 
-  samtools view \\
-    -b \\
-    -o shards/\${shard_base}.bam \\
-    "${tumor_bam}" \\
-    "\${regions[@]}"
+      cp "\$interval_file" "shards/\${shard_base}.intervals"
 
-  echo "samtools exit=\$?"
-  ls -lh shards/test.bam
+      # Convert BED format (0-based) to samtools regions (1-based)
+      grep -v '^@' "\$interval_file" \\
+        | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' \\
+        > /tmp/regions_\${shard_base}.txt
 
-  echo "=== DONE ==="
+      echo "region_count=\$(wc -l < /tmp/regions_\${shard_base}.txt)"
+      echo "first_region=\$(head -1 /tmp/regions_\${shard_base}.txt)"
+      echo "last_region=\$(tail -1 /tmp/regions_\${shard_base}.txt)"
+
+      if [[ ! -s /tmp/regions_\${shard_base}.txt ]]; then
+        echo "ERROR: no regions parsed from \$interval_file" >&2
+        exit 1
+      fi
+
+      readarray -t regions < /tmp/regions_\${shard_base}.txt
+
+      echo "--- running samtools view (\${shard_base}) ---"
+      samtools view \\
+        -@ \$(( ${task.cpus} - 1 )) \\
+        -b \\
+        -o "shards/\${shard_base}.bam" \\
+        "${tumor_bam}" \\
+        "\${regions[@]}"
+
+      echo "samtools_view_exit=\$?"
+
+      [[ -s "shards/\${shard_base}.bam" ]] \\
+        || { echo "ERROR: BAM missing or empty for \${shard_base}" >&2; exit 1; }
+
+      samtools quickcheck -v "shards/\${shard_base}.bam"
+
+      echo "--- running samtools index (\${shard_base}) ---"
+      samtools index -@ \$(( ${task.cpus} - 1 )) "shards/\${shard_base}.bam"
+
+      [[ -s "shards/\${shard_base}.bam.bai" ]] \\
+        || { echo "ERROR: BAI missing or empty for \${shard_base}" >&2; exit 1; }
+
+      echo "=== shard \${shard_base}: DONE ===" ; date
+
+    } > "\$log_file" 2>&1 || failed=1
+
+    cat "\$log_file"
+
+    if (( failed )); then
+      echo "ERROR: shard \${shard_base} failed, aborting" >&2
+      exit 1
+    fi
+
+  done
+
+  echo "=== Final shard listing ===" ; ls -lah shards || true
+  echo "BAM count:      \$(find shards -maxdepth 1 -name '*.bam'        | wc -l)"
+  echo "BAI count:      \$(find shards -maxdepth 1 -name '*.bam.bai'    | wc -l)"
+  echo "interval count: \$(find shards -maxdepth 1 -name '*.intervals'  | wc -l)"
+
+  echo "=== subset_tumor_per_shard: END ===" ; date
   """
 }
 
