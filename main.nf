@@ -417,7 +417,7 @@ process subset_tumor_per_shard {
 
 
     echo "--- running samtools index (\${shard_base}) ---"
-    samtools index -@ \$(( ${task.cpus} - 1 )) "shards/\${shard_base}.bam"
+    samtools index "shards/\${shard_base}.bam"
 
     [[ -s "shards/\${shard_base}.bam.bai" ]] \\
       || { echo "ERROR: BAI missing or empty for \${shard_base}" >&2; exit 1; }
