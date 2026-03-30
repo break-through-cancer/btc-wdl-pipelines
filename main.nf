@@ -79,7 +79,6 @@ process split_intervals {
 
 process subset_tumor_per_shard {
   tag "${meta.id}"
-  cache false
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
@@ -389,13 +388,13 @@ workflow {
   .flatten()
   .map { f -> tuple(f.name.replaceFirst(/\.bam$/, ''), f) }
 
-shard_bais_ch = subset_res.shard_bais
-  .flatten()
-  .map { f -> tuple(f.name.replaceFirst(/\.bam\.bai$/, ''), f) }
+  shard_bais_ch = subset_res.shard_bais
+    .flatten()
+    .map { f -> tuple(f.name.replaceFirst(/\.bam\.bai$/, ''), f) }
 
-shard_intervals_ch = subset_res.shard_intervals
-  .flatten()
-  .map { f -> tuple(f.name.replaceFirst(/\.intervals$/, ''), f) }
+  shard_intervals_ch = subset_res.shard_intervals
+    .flatten()
+    .map { f -> tuple(f.name.replaceFirst(/\.intervals$/, ''), f) }
 
 
   mutect_inputs_ch = shard_bams_ch
