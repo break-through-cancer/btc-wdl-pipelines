@@ -383,6 +383,7 @@ workflow {
       log.info "Tumor sample name: ${s}"
       return s
     }
+    .first()
 
   shard_bams_ch = subset_res.shard_bams
   .flatten()
@@ -420,7 +421,7 @@ workflow {
     Channel.value(alleles_vcf_val),
     Channel.value(alleles_vcf_tbi_val),
     tumor_sample_ch,
-    params.m2_extra_args ?: ''
+    Channel.value(params.m2_extra_args ?: '')
   )
 
   gather_vcfs(mutect_res.vcf.collect())
