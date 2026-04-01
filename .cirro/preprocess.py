@@ -112,7 +112,7 @@ def build_mutect_runs(samples: pd.DataFrame, bam_map: dict) -> list[dict]:
 def main():
     ds = PreprocessDataset.from_running()
 
-    bam_map = extract_bams(ds.files)
+    bam_map = extract_bams(ds)
 
     if "status" not in ds.samplesheet.columns:
         print("\n!! No 'status' column in samplesheet — falling back to PBMC name heuristic")
