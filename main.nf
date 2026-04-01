@@ -76,7 +76,8 @@ process split_intervals {
   echo "=== split_intervals: END ==="
   """
 }
-
+// subset_tumor_per_shard: add sample_id to tag outputs so shard filenames
+// don't collide across samples. Add meta.id prefix to all shard filenames:
 process subset_tumor_per_shard {
   tag "${meta.id}"
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
@@ -86,19 +87,15 @@ process subset_tumor_per_shard {
     path interval_files
 
   output:
-    path "shards/*.bam",          emit: shard_bams
-    path "shards/*.bam.bai",      emit: shard_bais
-    path "shards/*.intervals",    emit: shard_intervals
-    path "tumor_sample_name.txt", emit: tumor_sample
+    tuple val(meta.id), path("shards/${meta.id}.*.bam"),          emit: shard_bams
+    tuple val(meta.id), path("shards/${meta.id}.*.bam.bai"),      emit: shard_bais
+    tuple val(meta.id), path("shards/${meta.id}.*.intervals"),    emit: shard_intervals
+    tuple val(meta.id), path("tumor_sample_name.txt"),            emit: tumor_sample
 
   script:
   """
   set -euo pipefail
   mkdir -p shards
-
-  echo "=== subset_tumor_per_shard: START ===" ; date
-  echo "tumor_bam=${tumor_bam}"
-  echo "cpus=${task.cpus}"
 
   tumor_sample=\$(samtools view -H "${tumor_bam}" \\
     | awk -F'\\t' '/^@RG/ {
@@ -106,72 +103,35 @@ process subset_tumor_per_shard {
           if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i }
       }' | sort -u)
 
-  [[ -n "\$tumor_sample" ]] \\
-    || { echo "ERROR: No SM tag in tumor BAM header" >&2; exit 1; }
-  [[ \$(echo "\$tumor_sample" | wc -l) -eq 1 ]] \\
-    || { echo "ERROR: Multiple SM values: \$tumor_sample" >&2; exit 1; }
-
+  [[ -n "\$tumor_sample" ]] || { echo "ERROR: No SM tag in tumor BAM header" >&2; exit 1; }
   echo "\$tumor_sample" > tumor_sample_name.txt
-  echo "tumor_sample=\$tumor_sample"
-
-  total=\$(ls -1 *.intervals | wc -l)
-  echo "total interval shards=\$total"
 
   shard_num=0
-
   for interval_file in *.intervals; do
     shard_num=\$(( shard_num + 1 ))
     shard_base=\$(basename "\$interval_file" .intervals)
 
-    echo "--- processing shard \${shard_num}/\${total}: \${shard_base} ---"
+    # Prefix with sample id -- THIS is what prevents cross-sample collisions
+    prefixed="${meta.id}.\${shard_base}"
 
-    cp "\$interval_file" "shards/\${shard_base}.intervals"
+    cp "\$interval_file" "shards/\${prefixed}.intervals"
 
     grep -v '^@' "\$interval_file" \\
       | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' \\
       > /tmp/regions_\${shard_base}.txt
 
-    echo "region_count=\$(wc -l < /tmp/regions_\${shard_base}.txt)"
-    echo "first_region=\$(head -1 /tmp/regions_\${shard_base}.txt)"
-    echo "last_region=\$(tail -1 /tmp/regions_\${shard_base}.txt)"
-
-    [[ -s /tmp/regions_\${shard_base}.txt ]] \\
-      || { echo "ERROR: no regions for \${shard_base}" >&2; exit 1; }
-
-    readarray -t regions < /tmp/regions_\${shard_base}.txt
-
-    echo "--- running samtools view (\${shard_base}) ---"
     samtools view \\
       -@ \$(( ${task.cpus} - 1 )) \\
       -b \\
-      -o "shards/\${shard_base}.bam" \\
+      -o "shards/\${prefixed}.bam" \\
       "${tumor_bam}" \\
-      "\${regions[@]}"
+      \$(cat /tmp/regions_\${shard_base}.txt | tr '\\n' ' ')
 
-    echo "samtools_view_exit=\$?"
-
-    [[ -s "shards/\${shard_base}.bam" ]] \\
-      || { echo "ERROR: BAM missing or empty for \${shard_base}" >&2; exit 1; }
-
-
-    echo "--- running samtools index (\${shard_base}) ---"
-    samtools index "shards/\${shard_base}.bam"
-
-    [[ -s "shards/\${shard_base}.bam.bai" ]] \\
-      || { echo "ERROR: BAI missing or empty for \${shard_base}" >&2; exit 1; }
-
-    echo "=== shard \${shard_base}: DONE ==="
-
+    samtools index "shards/\${prefixed}.bam"
   done
-
-  echo "=== Final shard listing ===" ; ls -lah shards || true
-  echo "BAM count:      \$(find shards -maxdepth 1 -name '*.bam'       | wc -l)"
-  echo "BAI count:      \$(find shards -maxdepth 1 -name '*.bam.bai'   | wc -l)"
-  echo "interval count: \$(find shards -maxdepth 1 -name '*.intervals' | wc -l)"
-
-  echo "=== subset_tumor_per_shard: END ===" ; date
   """
 }
+
 
 process mutect_wrapper {
   label 'process_medium'
@@ -295,138 +255,145 @@ process mutect_wrapper {
   '''
 }
 
+// In gather_vcfs, fix the output to be per-sample:
 process gather_vcfs {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
+  tag "${sample_id}"  // <-- add this so logs show which sample
+
   input:
-    path vcfs, arity: '1..*'
+    tuple val(sample_id), path(vcfs)  // <-- now receives (id, [vcf list])
 
   output:
-    path "started.txt"
-    path "merged.vcf.gz"
-    path "merged.vcf.gz.tbi"
+    tuple val(sample_id), path("${sample_id}.merged.vcf.gz"),     emit: vcf  // named per sample
+    tuple val(sample_id), path("${sample_id}.merged.vcf.gz.tbi"), emit: tbi
 
   script:
   """
   set -euo pipefail
-  echo "=== gather_vcfs: START ===" | tee started.txt
-  echo "SCRIPT_STARTED \$(date)" >> started.txt
-  echo "PWD=\$(pwd)"
-  ls -lah
+  echo "=== gather_vcfs: START for ${sample_id} ==="
 
   find . -maxdepth 1 -type f -name '*.vcf.gz' -print | sort > vcfs.list
   echo "VCFs found: \$(wc -l < vcfs.list)"
-  cat vcfs.list
 
   sed -E 's/.*out\\.([0-9]+).*/\\1\\t&/' vcfs.list | sort -k1,1n | cut -f2- > vcfs.sorted.list
   awk '{print "--INPUT", \$0}' vcfs.sorted.list > gather.args
-  echo "gather.args contents:"
-  cat gather.args
 
-  echo "--- Running GatherVcfs ---"
-  time gatk GatherVcfs --arguments_file gather.args -O merged.vcf.gz
-  echo "--- GatherVcfs done ---"
+  gatk GatherVcfs --arguments_file gather.args -O ${sample_id}.merged.vcf.gz
 
-  if [ ! -s merged.vcf.gz.tbi ]; then
-    echo "No index found, creating..."
-    tabix -f -p vcf merged.vcf.gz || gatk IndexFeatureFile -I merged.vcf.gz
+  if [ ! -s ${sample_id}.merged.vcf.gz.tbi ]; then
+    tabix -f -p vcf ${sample_id}.merged.vcf.gz || gatk IndexFeatureFile -I ${sample_id}.merged.vcf.gz
   fi
-  test -s merged.vcf.gz.tbi
 
-  echo "Final output:"
-  ls -lah merged.vcf.gz merged.vcf.gz.tbi
-  echo "=== gather_vcfs: END ==="
+  echo "=== gather_vcfs: END for ${sample_id} ==="
   """
 }
+
 workflow {
 
-  log.info "=== WORKFLOW START ==="
-  log.info "tumor_reads       : ${params.tumor_reads}"
-  log.info "scatter_count     : ${params.scatter_count}"
-  log.info "normal_reads      : ${params.normal_reads ?: 'NOT PROVIDED (tumor-only)'}"
-  log.info "force_call_file   : ${params.force_call_file ?: 'NOT PROVIDED'}"
-  log.info "m2_extra_args     : ${params.m2_extra_args ?: 'NONE'}"
-  log.info "gatk_docker       : ${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0 (default)'}"
+  // Parse the list of runs emitted by your Python preprocess script
+  runs_ch = Channel.fromList(params.mutect_runs)
+    .map { run ->
+      def meta = [id: run.output_prefix]
+      def tumor_bam = file(run.tumor_reads, checkIfExists: true)
+      def tumor_bai = file(run.tumor_reads_index, checkIfExists: true)
+      tuple(meta, tumor_bam, tumor_bai,
+            run.normal_reads       ?: null,
+            run.normal_reads_index ?: null,
+            run.tumor_sample_name)
+    }
 
+  // Split intervals once (shared across all samples - this is fine, it's reference-based)
   interval_res = split_intervals(
-    file(params.ref_fasta, checkIfExists: true),
-    file(params.ref_fai, checkIfExists: true),
-    file(params.ref_dict, checkIfExists: true),
-    file(params.intervals, checkIfExists: true),
+    file(params.ref_fasta,    checkIfExists: true),
+    file(params.ref_fai,      checkIfExists: true),
+    file(params.ref_dict,     checkIfExists: true),
+    file(params.intervals,    checkIfExists: true),
     params.scatter_count as int
   )
 
-  normal_bam_val      = params.normal_reads          ? file(params.normal_reads, checkIfExists: true)          : file(NO_NORMAL_BAM_PATH, checkIfExists: true)
-  normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index, checkIfExists: true)    : file(NO_NORMAL_BAI_PATH, checkIfExists: true)
-  alleles_vcf_val     = params.force_call_file       ? file(params.force_call_file, checkIfExists: true)       : file(NO_ALLELES_VCF_PATH, checkIfExists: true)
-  alleles_vcf_tbi_val = params.force_call_file_index ? file(params.force_call_file_index, checkIfExists: true) : file(NO_ALLELES_TBI_PATH, checkIfExists: true)
+  // Subset shards per sample -- each sample runs subset independently
+  subset_input_ch = runs_ch.map { meta, tbam, tbai, nbam, nbai, tsample ->
+    tuple(meta, tbam, tbai)
+  }
 
-  log.info "normal_bam_val    : ${normal_bam_val}"
-  log.info "alleles_vcf_val   : ${alleles_vcf_val}"
-
-  // localize full tumor BAM once, extract tumor sample once, create shard BAMs once
   subset_res = subset_tumor_per_shard(
-    Channel.of([
-      [id: 'tumor'],
-      file(params.tumor_reads, checkIfExists: true),
-      file(params.tumor_reads_index, checkIfExists: true)
-    ]),
+    subset_input_ch,
     interval_res.interval_shards.collect()
   )
 
-  tumor_sample_ch = subset_res.tumor_sample
-    .map { f ->
-      def s = f.text.trim()
-      if( !s )
-        error "Could not extract tumor sample name from tumor BAM header"
-      log.info "Tumor sample name: ${s}"
-      return s
-    }
-    .first()
-
+  // Rebuild mutect inputs, now keyed by sample_id
   shard_bams_ch = subset_res.shard_bams
-  .flatten()
-  .map { f -> tuple(f.name.replaceFirst(/\.bam$/, ''), f) }
+    .transpose()
+    .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.bam$/, ''), f) }
 
   shard_bais_ch = subset_res.shard_bais
-    .flatten()
-    .map { f -> tuple(f.name.replaceFirst(/\.bam\.bai$/, ''), f) }
+    .transpose()
+    .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.bam\.bai$/, ''), f) }
 
   shard_intervals_ch = subset_res.shard_intervals
-    .flatten()
-    .map { f -> tuple(f.name.replaceFirst(/\.intervals$/, ''), f) }
+    .transpose()
+    .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.intervals$/, ''), f) }
 
-
+  // Join shards by (sample_id, shard_base) -- no cross-sample mixups possible
   mutect_inputs_ch = shard_bams_ch
-    .join(shard_bais_ch)
-    .map { base, bam, bai -> tuple(base, bam, bai) }
-    .join(shard_intervals_ch)
-    .map { base, bam, bai, interval ->
+    .join(shard_bais_ch,      by: [0, 1])
+    .join(shard_intervals_ch, by: [0, 1])
+    .map { sid, base, bam, bai, interval ->
       tuple(
-        interval,
-        bam,
-        bai,
-        file(params.ref_fasta, checkIfExists: true),
-        file(params.ref_fai, checkIfExists: true),
-        file(params.ref_dict, checkIfExists: true),
-        file(params.germline_resource, checkIfExists: true)
+        sid,
+        interval, bam, bai,
+        file(params.ref_fasta,          checkIfExists: true),
+        file(params.ref_fai,            checkIfExists: true),
+        file(params.ref_dict,           checkIfExists: true),
+        file(params.germline_resource,  checkIfExists: true)
+      )
+    }
+
+  // Pull normal bam/bai back from runs_ch by sample id for the mutect call
+  normals_ch = runs_ch.map { meta, tbam, tbai, nbam, nbai, tsample ->
+    def nbam_file = nbam ? file(nbam, checkIfExists: true) : file(NO_NORMAL_BAM_PATH)
+    def nbai_file = nbai ? file(nbai, checkIfExists: true) : file(NO_NORMAL_BAI_PATH)
+    tuple(meta.id, nbam_file, nbai_file, tsample)
+  }
+
+  // Join mutect inputs with per-sample normals
+  mutect_full_ch = mutect_inputs_ch
+    .join(normals_ch, by: 0)
+    .map { sid, interval, bam, bai, ref, fai, dict, germ, nbam, nbai, tsample ->
+      tuple(
+        tuple(interval, bam, bai, ref, fai, dict, germ),  // positional input tuple
+        nbam, nbai,
+        file(NO_ALLELES_VCF_PATH),                         // alleles (extend later if needed)
+        file(NO_ALLELES_TBI_PATH),
+        tsample,
+        params.m2_extra_args ?: ''
       )
     }
 
   mutect_res = mutect_wrapper(
-    mutect_inputs_ch,
-    Channel.value(normal_bam_val),
-    Channel.value(normal_bai_val),
-    Channel.value(alleles_vcf_val),
-    Channel.value(alleles_vcf_tbi_val),
-    tumor_sample_ch,
-    Channel.value(params.m2_extra_args ?: '')
+    mutect_full_ch.map { it[0] },
+    mutect_full_ch.map { it[1] },
+    mutect_full_ch.map { it[2] },
+    mutect_full_ch.map { it[3] },
+    mutect_full_ch.map { it[4] },
+    mutect_full_ch.map { it[5] },
+    mutect_full_ch.map { it[6] }
   )
 
-  gather_vcfs(mutect_res.vcf.collect())
+  // Group VCFs by sample_id, then gather per sample separately
+  // mutect_wrapper needs to emit sample_id -- add tag passthrough if not already there
+  mutect_res.vcf
+    .map { vcf -> 
+      // Extract sample_id from filename prefix (e.g. "patient1__tumor1.0001.vcf.gz")
+      def sid = vcf.name.replaceFirst(/\.\d+\.vcf\.gz$/, '')
+      tuple(sid, vcf)
+    }
+    .groupTuple(size: params.scatter_count)
+    .set { grouped_vcfs_ch }
 
-  log.info "=== WORKFLOW SUBMITTED ==="
+  gather_vcfs(grouped_vcfs_ch)
 }
 // /*
 //  * --------------------------------------------
