@@ -291,38 +291,51 @@ process gather_vcfs {
 }
 
 workflow {
+  log.info "=== WORKFLOW START ==="
+  log.info "mutect_runs count: ${params.mutect_runs.size()}"
+  params.mutect_runs.each { run ->
+      log.info "  run: ${run.output_prefix} | tumor: ${run.tumor_reads}"
+  }
 
-  // Parse the list of runs emitted by your Python preprocess script
+  // Parse runs -- remove checkIfExists on large BAMs to avoid blocking S3 checks
   runs_ch = Channel.fromList(params.mutect_runs)
     .map { run ->
       def meta = [id: run.output_prefix]
-      def tumor_bam = file(run.tumor_reads, checkIfExists: true)
-      def tumor_bai = file(run.tumor_reads_index, checkIfExists: true)
+      def tumor_bam = file(run.tumor_reads)           // no checkIfExists
+      def tumor_bai = file(run.tumor_reads_index)     // no checkIfExists
+      log.info "Queuing run: ${meta.id}"
       tuple(meta, tumor_bam, tumor_bai,
             run.normal_reads       ?: null,
             run.normal_reads_index ?: null,
             run.tumor_sample_name)
     }
 
-  // Split intervals once (shared across all samples - this is fine, it's reference-based)
+  log.info "=== Submitting split_intervals ==="
   interval_res = split_intervals(
-    file(params.ref_fasta,    checkIfExists: true),
-    file(params.ref_fai,      checkIfExists: true),
-    file(params.ref_dict,     checkIfExists: true),
-    file(params.intervals,    checkIfExists: true),
+    file(params.ref_fasta,   checkIfExists: true),  // small files, ok to check
+    file(params.ref_fai,     checkIfExists: true),
+    file(params.ref_dict,    checkIfExists: true),
+    file(params.intervals,   checkIfExists: true),
     params.scatter_count as int
   )
 
-  // Subset shards per sample -- each sample runs subset independently
+  log.info "=== Building subset_input_ch ==="
   subset_input_ch = runs_ch.map { meta, tbam, tbai, nbam, nbai, tsample ->
+    log.info "subset_input_ch: emitting ${meta.id}"
     tuple(meta, tbam, tbai)
   }
 
+  intervals_ready = interval_res.interval_shards
+    .collect()
+    .map { shards ->
+        log.info "=== split_intervals done: ${shards.size()} shards ready, submitting subset jobs ==="
+        return shards
+    }
+
   subset_res = subset_tumor_per_shard(
     subset_input_ch,
-    interval_res.interval_shards.collect()
+    intervals_ready
   )
-
   // Rebuild mutect inputs, now keyed by sample_id
   shard_bams_ch = subset_res.shard_bams
     .transpose()
