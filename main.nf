@@ -172,9 +172,9 @@ process mutect_wrapper {
     val  extra_args
 
   output:
-    path "*.vcf.gz",     emit: vcf
-    path "*.vcf.gz.tbi", emit: tbi
-    path "versions.yml", emit: versions
+    tuple val(tumor_sample), path("*.vcf.gz"),     emit: vcf
+    tuple val(tumor_sample), path("*.vcf.gz.tbi"), emit: tbi
+    path "versions.yml",                           emit: versions
 
   shell:
   '''
@@ -200,13 +200,13 @@ process mutect_wrapper {
   echo "=== mutect_wrapper: START ==="
   echo "PWD=$(pwd)"
   echo "shard_base=${shard_base}"
+  echo "tumor_sample=${tumor_sample}"
   echo "tumor_bam=${tumor_bam}  size=$(ls -lah $tumor_bam | awk '{print $5}')"
   echo "interval_shard=${interval_shard}"
   echo "ref_fasta=${ref_fasta}"
   echo "germline_resource=${germline_resource}"
   echo "normal_bam=${normal_bam}"
   echo "alleles_vcf=${alleles_vcf}"
-  echo "tumor_sample=${tumor_sample}"
   echo "heap_mb=${heap_mb}M"
   echo "extra_args='${extra_args}'"
   echo "Staged files:"
@@ -276,13 +276,13 @@ process gather_vcfs {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
-  tag "${sample_id}"  // <-- add this so logs show which sample
+  tag "${sample_id}"
 
   input:
-    tuple val(sample_id), path(vcfs)  // <-- now receives (id, [vcf list])
+    tuple val(sample_id), path(vcfs)
 
   output:
-    tuple val(sample_id), path("${sample_id}.merged.vcf.gz"),     emit: vcf  // named per sample
+    tuple val(sample_id), path("${sample_id}.merged.vcf.gz"),     emit: vcf
     tuple val(sample_id), path("${sample_id}.merged.vcf.gz.tbi"), emit: tbi
 
   script:
@@ -292,6 +292,7 @@ process gather_vcfs {
 
   find . -maxdepth 1 -type f -name '*.vcf.gz' -print | sort > vcfs.list
   echo "VCFs found: \$(wc -l < vcfs.list)"
+  cat vcfs.list
 
   sed -E 's/.*out\\.([0-9]+).*/\\1\\t&/' vcfs.list | sort -k1,1n | cut -f2- > vcfs.sorted.list
   awk '{print "--INPUT", \$0}' vcfs.sorted.list > gather.args
@@ -302,9 +303,12 @@ process gather_vcfs {
     tabix -f -p vcf ${sample_id}.merged.vcf.gz || gatk IndexFeatureFile -I ${sample_id}.merged.vcf.gz
   fi
 
+  echo "Final output:"
+  ls -lah ${sample_id}.merged.vcf.gz ${sample_id}.merged.vcf.gz.tbi
   echo "=== gather_vcfs: END for ${sample_id} ==="
   """
 }
+
 workflow {
 
   log.info "=== WORKFLOW START ==="
@@ -409,11 +413,15 @@ workflow {
   )
 
   mutect_res.vcf
-    .map { vcf ->
-      def sid = vcf.name.replaceFirst(/\.\d+\.vcf\.gz$/, '')
-      tuple(sid, vcf)
+    .map { tsample, vcf ->
+        log.info "VCF emitted for sample: ${tsample} -> ${vcf.name}"
+        tuple(tsample, vcf)
     }
     .groupTuple(size: params.scatter_count)
+    .map { tsample, vcfs ->
+        log.info "Gather triggered for sample: ${tsample} with ${vcfs.size()} VCFs"
+        tuple(tsample, vcfs)
+    }
     .set { grouped_vcfs_ch }
 
   gather_vcfs(grouped_vcfs_ch)
