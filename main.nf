@@ -219,18 +219,26 @@ process mutect_wrapper {
   tumor_sample="!{tumor_sample}"
   extra_args="!{extra_args}"
 
+  task_cpus="!{task.cpus ?: 1}"
   heap_mb="!{ Math.min(task.memory ? (task.memory.mega * 0.8).intValue() : 3072, 24000) }"
+
+  export OMP_NUM_THREADS="${task_cpus}"
+  export MKL_NUM_THREADS="${task_cpus}"
+  export OPENBLAS_NUM_THREADS="${task_cpus}"
+  export NUMEXPR_NUM_THREADS="${task_cpus}"
 
   echo "=== mutect_wrapper: START ==="
   echo "PWD=$(pwd)"
   echo "shard_base=${shard_base}"
-  echo "tumor_bam=${tumor_bam}  size=$(ls -lah $tumor_bam | awk '{print $5}')"
+  echo "tumor_bam=${tumor_bam}  size=$(ls -lah "$tumor_bam" | awk '{print $5}')"
   echo "interval_shard=${interval_shard}"
   echo "ref_fasta=${ref_fasta}"
   echo "germline_resource=${germline_resource}"
   echo "normal_bam=${normal_bam}"
   echo "alleles_vcf=${alleles_vcf}"
   echo "tumor_sample=${tumor_sample}"
+  echo "task_cpus=${task_cpus}"
+  echo "OMP_NUM_THREADS=${OMP_NUM_THREADS}"
   echo "heap_mb=${heap_mb}M"
   echo "extra_args='${extra_args}'"
   echo "Staged files:"
@@ -274,7 +282,7 @@ process mutect_wrapper {
   out_prefix="out.${shard_base}"
   echo "=== Running Mutect2 (output: ${out_prefix}.vcf.gz) ==="
 
-  gatk --java-options "-Xmx${heap_mb}M -XX:-UsePerfData" Mutect2 \
+  gatk --java-options "-Xmx${heap_mb}M -XX:-UsePerfData -XX:ParallelGCThreads=${task_cpus}" Mutect2 \
     --input "$tumor_bam" \
     ${normal_args} \
     --reference "$ref_fasta" \
@@ -282,6 +290,7 @@ process mutect_wrapper {
     --intervals "$interval_shard" \
     --tmp-dir . \
     --tumor-sample "$tumor_sample" \
+    --native-pair-hmm-threads "${task_cpus}" \
     ${alleles_args} \
     ${extra_args} \
     --output "${out_prefix}.vcf.gz"
@@ -294,6 +303,128 @@ process mutect_wrapper {
   echo "=== mutect_wrapper: END ==="
   '''
 }
+
+// process mutect_wrapper {
+//   label 'process_medium'
+//   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+//   stageInMode 'symlink'
+
+//   input:
+//     tuple(
+//       path(interval_shard),
+//       path(tumor_bam),
+//       path(tumor_bam_index),
+//       path(ref_fasta),
+//       path(ref_fai),
+//       path(ref_dict),
+//       path(germline_resource)
+//     )
+//     path normal_bam
+//     path normal_bam_index
+//     path alleles_vcf
+//     path alleles_vcf_tbi
+//     val  tumor_sample
+//     val  extra_args
+
+//   output:
+//     path "*.vcf.gz",     emit: vcf
+//     path "*.vcf.gz.tbi", emit: tbi
+//     path "versions.yml", emit: versions
+
+//   shell:
+//   '''
+//   set -euo pipefail
+
+//   shard_base=$(basename "!{interval_shard}" .intervals)
+//   tumor_bam="!{tumor_bam}"
+//   tumor_bam_index="!{tumor_bam_index}"
+//   interval_shard="!{interval_shard}"
+//   ref_fasta="!{ref_fasta}"
+//   ref_fai="!{ref_fai}"
+//   ref_dict="!{ref_dict}"
+//   germline_resource="!{germline_resource}"
+//   normal_bam="!{normal_bam}"
+//   normal_bam_index="!{normal_bam_index}"
+//   alleles_vcf="!{alleles_vcf}"
+//   alleles_vcf_tbi="!{alleles_vcf_tbi}"
+//   tumor_sample="!{tumor_sample}"
+//   extra_args="!{extra_args}"
+
+//   heap_mb="!{ Math.min(task.memory ? (task.memory.mega * 0.8).intValue() : 3072, 24000) }"
+
+//   echo "=== mutect_wrapper: START ==="
+//   echo "PWD=$(pwd)"
+//   echo "shard_base=${shard_base}"
+//   echo "tumor_bam=${tumor_bam}  size=$(ls -lah $tumor_bam | awk '{print $5}')"
+//   echo "interval_shard=${interval_shard}"
+//   echo "ref_fasta=${ref_fasta}"
+//   echo "germline_resource=${germline_resource}"
+//   echo "normal_bam=${normal_bam}"
+//   echo "alleles_vcf=${alleles_vcf}"
+//   echo "tumor_sample=${tumor_sample}"
+//   echo "heap_mb=${heap_mb}M"
+//   echo "extra_args='${extra_args}'"
+//   echo "Staged files:"
+//   ls -lah
+
+//   [[ -n "$tumor_sample" ]] || { echo "ERROR: tumor_sample is empty" >&2; exit 1; }
+
+//   # --- normal sample ---
+//   normal_args=""
+//   if [[ "$(basename "$normal_bam")" != "NO_NORMAL_BAM" ]]; then
+//     echo "Normal BAM provided: $normal_bam"
+//     normal_sample=$(samtools view -H "$normal_bam" \
+//       | awk -F'\t' '/^@RG/ { for (i=1;i<=NF;i++) if ($i ~ /^SM:/) { sub(/^SM:/,"",$i); print $i } }' \
+//       | sort -u)
+//     [[ -n "$normal_sample" ]] || { echo "ERROR: No SM tag found in normal BAM header" >&2; exit 1; }
+//     [[ $(echo "$normal_sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values in normal BAM" >&2; exit 1; }
+//     echo "normal_sample=${normal_sample}"
+//     normal_args="--input $normal_bam --normal-sample $normal_sample"
+//   else
+//     echo "NO_NORMAL_BAM sentinel -> tumor-only mode"
+//   fi
+
+//   # --- alleles ---
+//   alleles_args=""
+//   if [[ "$(basename "$alleles_vcf")" != "NO_ALLELES_VCF" ]]; then
+//     echo "Alleles VCF provided: $alleles_vcf"
+//     alleles_args="--alleles $alleles_vcf"
+//   else
+//     echo "NO_ALLELES_VCF sentinel -> no force-calling"
+//   fi
+
+//   # --- germline resource index ---
+//   echo "--- Checking germline resource index ---"
+//   if [[ ! -f "${germline_resource}.tbi" ]]; then
+//     echo "No .tbi found, creating with tabix..."
+//     tabix -f -p vcf "$germline_resource"
+//   fi
+//   test -s "${germline_resource}.tbi"
+//   echo "Germline resource index OK"
+
+//   out_prefix="out.${shard_base}"
+//   echo "=== Running Mutect2 (output: ${out_prefix}.vcf.gz) ==="
+
+//   gatk --java-options "-Xmx${heap_mb}M -XX:-UsePerfData" Mutect2 \
+//     --input "$tumor_bam" \
+//     ${normal_args} \
+//     --reference "$ref_fasta" \
+//     --germline-resource "$germline_resource" \
+//     --intervals "$interval_shard" \
+//     --tmp-dir . \
+//     --tumor-sample "$tumor_sample" \
+//     ${alleles_args} \
+//     ${extra_args} \
+//     --output "${out_prefix}.vcf.gz"
+
+//   echo "=== Mutect2 finished ==="
+//   echo "Output files:"
+//   ls -lah ${out_prefix}*
+
+//   ( gatk --version > versions.yml 2>&1 || echo "gatk --version failed (non-fatal)" > versions.yml )
+//   echo "=== mutect_wrapper: END ==="
+//   '''
+// }
 
 process gather_vcfs {
   label 'process_medium'
