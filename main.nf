@@ -198,11 +198,10 @@ process subset_tumor_per_shard {
       || { echo "ERROR: BAM missing or empty for \${shard_base}" >&2; exit 1; }
 
     echo "--- running samtools index (\${shard_base}) ---"
-    echo "command: samtools index -@ \${index_threads} shards/\${shard_base}.bam"
+    echo "samtools_index_threads=0 (single-threaded by design)"
 
     time samtools index \\
-      -@ "\${index_threads}" \\
-      "shards/\${shard_base}.bam"
+      "shards/\${shard_base}.bam" \\
 
     echo "bai_bytes=\$(stat -c%s "shards/\${shard_base}.bam.bai" 2>/dev/null || echo NA)"
     echo "bai_size_human=\$(ls -lh "shards/\${shard_base}.bam.bai" 2>/dev/null | awk '{print \$5}' || echo NA)"
