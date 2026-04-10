@@ -96,9 +96,38 @@ process subset_tumor_per_shard {
   set -euo pipefail
   mkdir -p shards
 
-  echo "=== subset_tumor_per_shard: START ===" ; date
+  echo "=== subset_tumor_per_shard: START ==="
+  date
+  echo "PWD=\$(pwd)"
+  echo "hostname=\$(hostname || true)"
   echo "tumor_bam=${tumor_bam}"
-  echo "cpus=${task.cpus}"
+  echo "tumor_bam_index=${tumor_bam_index}"
+  echo "task.cpus=${task.cpus}"
+  echo "task.memory=${task.memory ?: 'NA'}"
+  echo "nproc=\$(nproc || true)"
+  echo "bam_size=\$(ls -lh "${tumor_bam}" | awk '{print \$5}')"
+
+  echo "=== SYSTEM INFO ==="
+  uname -a || true
+  lscpu || true
+  free -h || true
+  df -h || true
+
+  echo "=== AWS METADATA (if available) ==="
+  curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/instance-type || echo "instance-type unavailable"
+  echo
+  curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/local-hostname || echo "local-hostname unavailable"
+  echo
+  curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/ami-id || echo "ami-id unavailable"
+  echo
+
+  samtools_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
+  index_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
+
+  echo "samtools_view_threads=\${samtools_threads}"
+  echo "samtools_index_threads=\${index_threads}"
+  echo "interval files present:"
+  ls -1 *.intervals || true
 
   tumor_sample=\$(samtools view -H "${tumor_bam}" \\
     | awk -F'\\t' '/^@RG/ {
@@ -123,7 +152,17 @@ process subset_tumor_per_shard {
     shard_num=\$(( shard_num + 1 ))
     shard_base=\$(basename "\$interval_file" .intervals)
 
+    echo
+    echo "============================================================"
     echo "--- processing shard \${shard_num}/\${total}: \${shard_base} ---"
+    echo "start_time=\$(date)"
+    echo "interval_file=\$interval_file"
+    echo "disk before shard:"
+    df -h . || true
+    echo "memory before shard:"
+    free -h || true
+    echo "top snapshot before shard:"
+    top -b -n 1 | head -20 || true
 
     cp "\$interval_file" "shards/\${shard_base}.intervals"
 
@@ -141,35 +180,52 @@ process subset_tumor_per_shard {
     readarray -t regions < /tmp/regions_\${shard_base}.txt
 
     echo "--- running samtools view (\${shard_base}) ---"
-    samtools view \\
-      -@ \$(( ${task.cpus} - 1 )) \\
+    echo "command: samtools view -@ \${samtools_threads} -b -o shards/\${shard_base}.bam ${tumor_bam} [regions...]"
+    echo "region_arg_count=\${#regions[@]}"
+
+    time samtools view \\
+      -@ "\${samtools_threads}" \\
       -b \\
       -o "shards/\${shard_base}.bam" \\
       "${tumor_bam}" \\
       "\${regions[@]}"
 
     echo "samtools_view_exit=\$?"
+    echo "bam_bytes=\$(stat -c%s "shards/\${shard_base}.bam" 2>/dev/null || echo NA)"
+    echo "bam_size_human=\$(ls -lh "shards/\${shard_base}.bam" 2>/dev/null | awk '{print \$5}' || echo NA)"
 
     [[ -s "shards/\${shard_base}.bam" ]] \\
       || { echo "ERROR: BAM missing or empty for \${shard_base}" >&2; exit 1; }
 
-
     echo "--- running samtools index (\${shard_base}) ---"
-    samtools index "shards/\${shard_base}.bam"
+    echo "command: samtools index -@ \${index_threads} shards/\${shard_base}.bam"
+
+    time samtools index \\
+      -@ "\${index_threads}" \\
+      "shards/\${shard_base}.bam"
+
+    echo "bai_bytes=\$(stat -c%s "shards/\${shard_base}.bam.bai" 2>/dev/null || echo NA)"
+    echo "bai_size_human=\$(ls -lh "shards/\${shard_base}.bam.bai" 2>/dev/null | awk '{print \$5}' || echo NA)"
 
     [[ -s "shards/\${shard_base}.bam.bai" ]] \\
       || { echo "ERROR: BAI missing or empty for \${shard_base}" >&2; exit 1; }
 
+    echo "top snapshot after shard:"
+    top -b -n 1 | head -20 || true
+    echo "end_time=\$(date)"
     echo "=== shard \${shard_base}: DONE ==="
-
+    echo "============================================================"
   done
 
-  echo "=== Final shard listing ===" ; ls -lah shards || true
+  echo
+  echo "=== Final shard listing ==="
+  ls -lah shards || true
   echo "BAM count:      \$(find shards -maxdepth 1 -name '*.bam'       | wc -l)"
   echo "BAI count:      \$(find shards -maxdepth 1 -name '*.bam.bai'   | wc -l)"
   echo "interval count: \$(find shards -maxdepth 1 -name '*.intervals' | wc -l)"
 
-  echo "=== subset_tumor_per_shard: END ===" ; date
+  echo "=== subset_tumor_per_shard: END ==="
+  date
   """
 }
 
