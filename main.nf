@@ -58,7 +58,12 @@ process split_intervals {
 
   echo "--- Running BedToIntervalList ---"
   echo "--- Hardcoding to chr1 only ---"
-  awk '$1=="chr1"' "$intervals" > chr1_only.bed
+  awk '\$1=="chr1"' "$intervals" > chr1_only.bed
+
+  echo "chr1 interval count:"
+  wc -l chr1_only.bed
+
+  [[ -s chr1_only.bed ]] || { echo "ERROR: chr1_only.bed is empty"; exit 1; }
 
   gatk BedToIntervalList \
     -I chr1_only.bed \
