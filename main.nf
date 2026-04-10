@@ -545,17 +545,17 @@ workflow {
       )
     }
 
-  mutect_res = mutect_wrapper(
-    mutect_inputs_ch,
-    Channel.value(normal_bam_val),
-    Channel.value(normal_bai_val),
-    Channel.value(alleles_vcf_val),
-    Channel.value(alleles_vcf_tbi_val),
-    tumor_sample_ch,
-    Channel.value(params.m2_extra_args ?: '')
-  )
+  // mutect_res = mutect_wrapper(
+  //   mutect_inputs_ch,
+  //   Channel.value(normal_bam_val),
+  //   Channel.value(normal_bai_val),
+  //   Channel.value(alleles_vcf_val),
+  //   Channel.value(alleles_vcf_tbi_val),
+  //   tumor_sample_ch,
+  //   Channel.value(params.m2_extra_args ?: '')
+  // )
 
-  gather_vcfs(mutect_res.vcf.collect())
+  // gather_vcfs(mutect_res.vcf.collect())
 
   log.info "=== WORKFLOW SUBMITTED ==="
 }
