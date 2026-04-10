@@ -96,38 +96,9 @@ process subset_tumor_per_shard {
   set -euo pipefail
   mkdir -p shards
 
-  echo "=== subset_tumor_per_shard: START ==="
-  date
-  echo "PWD=\$(pwd)"
-  echo "hostname=\$(hostname || true)"
+  echo "=== subset_tumor_per_shard: START ===" ; date
   echo "tumor_bam=${tumor_bam}"
-  echo "tumor_bam_index=${tumor_bam_index}"
-  echo "task.cpus=${task.cpus}"
-  echo "task.memory=${task.memory ?: 'NA'}"
-  echo "nproc=\$(nproc || true)"
-  echo "bam_size=\$(ls -lh "${tumor_bam}" | awk '{print \$5}')"
-
-  echo "=== SYSTEM INFO ==="
-  uname -a || true
-  lscpu || true
-  free -h || true
-  df -h || true
-
-  echo "=== AWS METADATA (if available) ==="
-  curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/instance-type || echo "instance-type unavailable"
-  echo
-  curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/local-hostname || echo "local-hostname unavailable"
-  echo
-  curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/ami-id || echo "ami-id unavailable"
-  echo
-
-  samtools_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
-  index_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
-
-  echo "samtools_view_threads=\${samtools_threads}"
-  echo "samtools_index_threads=\${index_threads}"
-  echo "interval files present:"
-  ls -1 *.intervals || true
+  echo "cpus=${task.cpus}"
 
   tumor_sample=\$(samtools view -H "${tumor_bam}" \\
     | awk -F'\\t' '/^@RG/ {
@@ -152,17 +123,7 @@ process subset_tumor_per_shard {
     shard_num=\$(( shard_num + 1 ))
     shard_base=\$(basename "\$interval_file" .intervals)
 
-    echo
-    echo "============================================================"
     echo "--- processing shard \${shard_num}/\${total}: \${shard_base} ---"
-    echo "start_time=\$(date)"
-    echo "interval_file=\$interval_file"
-    echo "disk before shard:"
-    df -h . || true
-    echo "memory before shard:"
-    free -h || true
-    echo "top snapshot before shard:"
-    top -b -n 1 | head -20 || true
 
     cp "\$interval_file" "shards/\${shard_base}.intervals"
 
@@ -180,53 +141,188 @@ process subset_tumor_per_shard {
     readarray -t regions < /tmp/regions_\${shard_base}.txt
 
     echo "--- running samtools view (\${shard_base}) ---"
-    echo "command: samtools view -@ \${samtools_threads} -b -o shards/\${shard_base}.bam ${tumor_bam} [regions...]"
-    echo "region_arg_count=\${#regions[@]}"
-
-    time samtools view \\
-      -@ "\${samtools_threads}" \\
+    samtools view \\
+      -@ \$(( ${task.cpus} - 1 )) \\
       -b \\
       -o "shards/\${shard_base}.bam" \\
       "${tumor_bam}" \\
       "\${regions[@]}"
 
     echo "samtools_view_exit=\$?"
-    echo "bam_bytes=\$(stat -c%s "shards/\${shard_base}.bam" 2>/dev/null || echo NA)"
-    echo "bam_size_human=\$(ls -lh "shards/\${shard_base}.bam" 2>/dev/null | awk '{print \$5}' || echo NA)"
 
     [[ -s "shards/\${shard_base}.bam" ]] \\
       || { echo "ERROR: BAM missing or empty for \${shard_base}" >&2; exit 1; }
 
+
     echo "--- running samtools index (\${shard_base}) ---"
-    echo "samtools_index_threads=0 (single-threaded by design)"
-
-    time samtools index \\
-      "shards/\${shard_base}.bam" \\
-
-    echo "bai_bytes=\$(stat -c%s "shards/\${shard_base}.bam.bai" 2>/dev/null || echo NA)"
-    echo "bai_size_human=\$(ls -lh "shards/\${shard_base}.bam.bai" 2>/dev/null | awk '{print \$5}' || echo NA)"
+    samtools index "shards/\${shard_base}.bam"
 
     [[ -s "shards/\${shard_base}.bam.bai" ]] \\
       || { echo "ERROR: BAI missing or empty for \${shard_base}" >&2; exit 1; }
 
-    echo "top snapshot after shard:"
-    top -b -n 1 | head -20 || true
-    echo "end_time=\$(date)"
     echo "=== shard \${shard_base}: DONE ==="
-    echo "============================================================"
+
   done
 
-  echo
-  echo "=== Final shard listing ==="
-  ls -lah shards || true
+  echo "=== Final shard listing ===" ; ls -lah shards || true
   echo "BAM count:      \$(find shards -maxdepth 1 -name '*.bam'       | wc -l)"
   echo "BAI count:      \$(find shards -maxdepth 1 -name '*.bam.bai'   | wc -l)"
   echo "interval count: \$(find shards -maxdepth 1 -name '*.intervals' | wc -l)"
 
-  echo "=== subset_tumor_per_shard: END ==="
-  date
+  echo "=== subset_tumor_per_shard: END ===" ; date
   """
 }
+
+// process subset_tumor_per_shard {
+//   tag "${meta.id}"
+//   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+
+//   input:
+//     tuple val(meta), path(tumor_bam), path(tumor_bam_index)
+//     path interval_files
+
+//   output:
+//     path "shards/*.bam",          emit: shard_bams
+//     path "shards/*.bam.bai",      emit: shard_bais
+//     path "shards/*.intervals",    emit: shard_intervals
+//     path "tumor_sample_name.txt", emit: tumor_sample
+
+//   script:
+//   """
+//   set -euo pipefail
+//   mkdir -p shards
+
+//   echo "=== subset_tumor_per_shard: START ==="
+//   date
+//   echo "PWD=\$(pwd)"
+//   echo "hostname=\$(hostname || true)"
+//   echo "tumor_bam=${tumor_bam}"
+//   echo "tumor_bam_index=${tumor_bam_index}"
+//   echo "task.cpus=${task.cpus}"
+//   echo "task.memory=${task.memory ?: 'NA'}"
+//   echo "nproc=\$(nproc || true)"
+//   echo "bam_size=\$(ls -lh "${tumor_bam}" | awk '{print \$5}')"
+
+//   echo "=== SYSTEM INFO ==="
+//   uname -a || true
+//   lscpu || true
+//   free -h || true
+//   df -h || true
+
+//   echo "=== AWS METADATA (if available) ==="
+//   curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/instance-type || echo "instance-type unavailable"
+//   echo
+//   curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/local-hostname || echo "local-hostname unavailable"
+//   echo
+//   curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/ami-id || echo "ami-id unavailable"
+//   echo
+
+//   samtools_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
+//   index_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
+
+//   echo "samtools_view_threads=\${samtools_threads}"
+//   echo "samtools_index_threads=\${index_threads}"
+//   echo "interval files present:"
+//   ls -1 *.intervals || true
+
+//   tumor_sample=\$(samtools view -H "${tumor_bam}" \\
+//     | awk -F'\\t' '/^@RG/ {
+//         for (i=1;i<=NF;i++)
+//           if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i }
+//       }' | sort -u)
+
+//   [[ -n "\$tumor_sample" ]] \\
+//     || { echo "ERROR: No SM tag in tumor BAM header" >&2; exit 1; }
+//   [[ \$(echo "\$tumor_sample" | wc -l) -eq 1 ]] \\
+//     || { echo "ERROR: Multiple SM values: \$tumor_sample" >&2; exit 1; }
+
+//   echo "\$tumor_sample" > tumor_sample_name.txt
+//   echo "tumor_sample=\$tumor_sample"
+
+//   total=\$(ls -1 *.intervals | wc -l)
+//   echo "total interval shards=\$total"
+
+//   shard_num=0
+
+//   for interval_file in *.intervals; do
+//     shard_num=\$(( shard_num + 1 ))
+//     shard_base=\$(basename "\$interval_file" .intervals)
+
+//     echo
+//     echo "============================================================"
+//     echo "--- processing shard \${shard_num}/\${total}: \${shard_base} ---"
+//     echo "start_time=\$(date)"
+//     echo "interval_file=\$interval_file"
+//     echo "disk before shard:"
+//     df -h . || true
+//     echo "memory before shard:"
+//     free -h || true
+//     echo "top snapshot before shard:"
+//     top -b -n 1 | head -20 || true
+
+//     cp "\$interval_file" "shards/\${shard_base}.intervals"
+
+//     grep -v '^@' "\$interval_file" \\
+//       | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' \\
+//       > /tmp/regions_\${shard_base}.txt
+
+//     echo "region_count=\$(wc -l < /tmp/regions_\${shard_base}.txt)"
+//     echo "first_region=\$(head -1 /tmp/regions_\${shard_base}.txt)"
+//     echo "last_region=\$(tail -1 /tmp/regions_\${shard_base}.txt)"
+
+//     [[ -s /tmp/regions_\${shard_base}.txt ]] \\
+//       || { echo "ERROR: no regions for \${shard_base}" >&2; exit 1; }
+
+//     readarray -t regions < /tmp/regions_\${shard_base}.txt
+
+//     echo "--- running samtools view (\${shard_base}) ---"
+//     echo "command: samtools view -@ \${samtools_threads} -b -o shards/\${shard_base}.bam ${tumor_bam} [regions...]"
+//     echo "region_arg_count=\${#regions[@]}"
+
+//     time samtools view \\
+//       -@ "\${samtools_threads}" \\
+//       -b \\
+//       -o "shards/\${shard_base}.bam" \\
+//       "${tumor_bam}" \\
+//       "\${regions[@]}"
+
+//     echo "samtools_view_exit=\$?"
+//     echo "bam_bytes=\$(stat -c%s "shards/\${shard_base}.bam" 2>/dev/null || echo NA)"
+//     echo "bam_size_human=\$(ls -lh "shards/\${shard_base}.bam" 2>/dev/null | awk '{print \$5}' || echo NA)"
+
+//     [[ -s "shards/\${shard_base}.bam" ]] \\
+//       || { echo "ERROR: BAM missing or empty for \${shard_base}" >&2; exit 1; }
+
+//     echo "--- running samtools index (\${shard_base}) ---"
+//     echo "samtools_index_threads=0 (single-threaded by design)"
+
+//     time samtools index \\
+//       "shards/\${shard_base}.bam" \\
+
+//     echo "bai_bytes=\$(stat -c%s "shards/\${shard_base}.bam.bai" 2>/dev/null || echo NA)"
+//     echo "bai_size_human=\$(ls -lh "shards/\${shard_base}.bam.bai" 2>/dev/null | awk '{print \$5}' || echo NA)"
+
+//     [[ -s "shards/\${shard_base}.bam.bai" ]] \\
+//       || { echo "ERROR: BAI missing or empty for \${shard_base}" >&2; exit 1; }
+
+//     echo "top snapshot after shard:"
+//     top -b -n 1 | head -20 || true
+//     echo "end_time=\$(date)"
+//     echo "=== shard \${shard_base}: DONE ==="
+//     echo "============================================================"
+//   done
+
+//   echo
+//   echo "=== Final shard listing ==="
+//   ls -lah shards || true
+//   echo "BAM count:      \$(find shards -maxdepth 1 -name '*.bam'       | wc -l)"
+//   echo "BAI count:      \$(find shards -maxdepth 1 -name '*.bam.bai'   | wc -l)"
+//   echo "interval count: \$(find shards -maxdepth 1 -name '*.intervals' | wc -l)"
+
+//   echo "=== subset_tumor_per_shard: END ==="
+//   date
+//   """
+// }
 
 process mutect_wrapper {
   label 'process_medium'
