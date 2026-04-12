@@ -56,12 +56,8 @@ process split_intervals {
   ls -lah
   mkdir -p scattered
 
-  echo "--- Using full intervals BED ---"
-  wc -l "$intervals"
-
-  [[ -s "$intervals" ]] || { echo "ERROR: intervals file is empty"; exit 1; }
-
-  gatk BedToIntervalList \
+  echo "--- Running BedToIntervalList ---"
+  gatk --java-options "-Xmx8g -XX:-UsePerfData" BedToIntervalList \
     -I "$intervals" \
     -SD "$ref_dict" \
     -O regions.interval_list
