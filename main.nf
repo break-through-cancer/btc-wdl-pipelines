@@ -56,17 +56,13 @@ process split_intervals {
   ls -lah
   mkdir -p scattered
 
-  echo "--- Running BedToIntervalList ---"
-  echo "--- Hardcoding to chr1 only ---"
-  awk '\$1=="chr1"' "$intervals" > chr1_only.bed
+  echo "--- Using full intervals BED ---"
+  wc -l "$intervals"
 
-  echo "chr1 interval count:"
-  wc -l chr1_only.bed
-
-  [[ -s chr1_only.bed ]] || { echo "ERROR: chr1_only.bed is empty"; exit 1; }
+  [[ -s "$intervals" ]] || { echo "ERROR: intervals file is empty"; exit 1; }
 
   gatk BedToIntervalList \
-    -I chr1_only.bed \
+    -I "$intervals" \
     -SD "$ref_dict" \
     -O regions.interval_list
   echo "--- BedToIntervalList done ---"
@@ -715,7 +711,6 @@ workflow {
   )
 
   gather_vcfs(mutect_res.vcf.collect())
-
   log.info "=== WORKFLOW SUBMITTED ==="
 }
 // /*
