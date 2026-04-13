@@ -648,6 +648,9 @@ workflow {
   log.info "normal_bam_val    : ${normal_bam_val}"
   log.info "alleles_vcf_val   : ${alleles_vcf_val}"
 
+  tumor_bam_val = file(params.tumor_reads, checkIfExists: true)
+  tumor_bai_val = file(params.tumor_reads_index, checkIfExists: true)
+
   tumor_sample_ch = get_tumor_sample_name(
     file(params.tumor_reads, checkIfExists: true),
     file(params.tumor_reads_index, checkIfExists: true)
@@ -659,8 +662,8 @@ workflow {
   log.info "extract_batch_size: ${batch_size}"
 
   
-
   interval_batches_ch = interval_res.interval_shards
+    .flatten()
     .buffer(size: batch_size)
     .map { batch ->
       tuple(
