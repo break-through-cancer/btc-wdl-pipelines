@@ -77,6 +77,34 @@ process split_intervals {
   """
 }
 
+process get_tumor_sample_name {
+  tag "tumor_sample"
+  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+
+  input:
+    path tumor_bam
+    path tumor_bam_index
+
+  output:
+    stdout emit: tumor_sample
+
+  script:
+  """
+  set -euo pipefail
+
+  tumor_sample=\$(samtools view -H "${tumor_bam}" \\
+    | awk -F'\\t' '/^@RG/ {
+        for (i=1;i<=NF;i++)
+          if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i }
+      }' | sort -u)
+
+  [[ -n "\$tumor_sample" ]] || { echo "ERROR: No SM tag in tumor BAM header" >&2; exit 1; }
+  [[ \$(echo "\$tumor_sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values: \$tumor_sample" >&2; exit 1; }
+
+  echo "\$tumor_sample"
+  """
+}
+
 // process subset_tumor_per_shard {
 //   tag "${meta.id}"
 //   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
@@ -173,26 +201,25 @@ process split_intervals {
 //   """
 // }
 
-process subset_tumor_per_shard {
+//4/13/26
+process subset_tumor_per_batch {
   tag "${meta.id}"
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-    tuple val(meta), path(tumor_bam), path(tumor_bam_index)
-    path interval_files
+    tuple val(meta), path(tumor_bam), path(tumor_bam_index), path(interval_files)
 
   output:
-    path "shards/*.bam",          emit: shard_bams
-    path "shards/*.bam.bai",      emit: shard_bais
-    path "shards/*.intervals",    emit: shard_intervals
-    path "tumor_sample_name.txt", emit: tumor_sample
+    path "shards/*.bam",        emit: shard_bams
+    path "shards/*.bam.bai",    emit: shard_bais
+    path "shards/*.intervals",  emit: shard_intervals
 
   script:
   """
   set -euo pipefail
   mkdir -p shards
 
-  echo "=== subset_tumor_per_shard: START ==="
+  echo "=== subset_tumor_per_batch: START ==="
   date
   echo "PWD=\$(pwd)"
   echo "hostname=\$(hostname || true)"
@@ -201,46 +228,14 @@ process subset_tumor_per_shard {
   echo "task.cpus=${task.cpus}"
   echo "task.memory=${task.memory ?: 'NA'}"
   echo "nproc=\$(nproc || true)"
-  echo "bam_size=\$(ls -lh "${tumor_bam}" | awk '{print \$5}')"
 
-  echo "=== SYSTEM INFO ==="
-  uname -a || true
-  lscpu || true
-  free -h || true
-  df -h || true
-
-  echo "=== AWS METADATA (if available) ==="
-  curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/instance-type || echo "instance-type unavailable"
-  echo
-  curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/local-hostname || echo "local-hostname unavailable"
-  echo
-  curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/ami-id || echo "ami-id unavailable"
-  echo
-
-  samtools_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
-  index_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
-
-  echo "samtools_view_threads=\${samtools_threads}"
-  echo "samtools_index_threads=\${index_threads}"
-  echo "interval files present:"
+  echo "interval files in this batch:"
   ls -1 *.intervals || true
 
-  tumor_sample=\$(samtools view -H "${tumor_bam}" \\
-    | awk -F'\\t' '/^@RG/ {
-        for (i=1;i<=NF;i++)
-          if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i }
-      }' | sort -u)
-
-  [[ -n "\$tumor_sample" ]] \\
-    || { echo "ERROR: No SM tag in tumor BAM header" >&2; exit 1; }
-  [[ \$(echo "\$tumor_sample" | wc -l) -eq 1 ]] \\
-    || { echo "ERROR: Multiple SM values: \$tumor_sample" >&2; exit 1; }
-
-  echo "\$tumor_sample" > tumor_sample_name.txt
-  echo "tumor_sample=\$tumor_sample"
+  samtools_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
 
   total=\$(ls -1 *.intervals | wc -l)
-  echo "total interval shards=\$total"
+  echo "total interval shards in this batch=\$total"
 
   shard_num=0
 
@@ -252,13 +247,6 @@ process subset_tumor_per_shard {
     echo "============================================================"
     echo "--- processing shard \${shard_num}/\${total}: \${shard_base} ---"
     echo "start_time=\$(date)"
-    echo "interval_file=\$interval_file"
-    echo "disk before shard:"
-    df -h . || true
-    echo "memory before shard:"
-    free -h || true
-    echo "top snapshot before shard:"
-    top -b -n 1 | head -20 || true
 
     cp "\$interval_file" "shards/\${shard_base}.intervals"
 
@@ -266,17 +254,12 @@ process subset_tumor_per_shard {
       | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' \\
       > /tmp/regions_\${shard_base}.txt
 
-    echo "region_count=\$(wc -l < /tmp/regions_\${shard_base}.txt)"
-    echo "first_region=\$(head -1 /tmp/regions_\${shard_base}.txt)"
-    echo "last_region=\$(tail -1 /tmp/regions_\${shard_base}.txt)"
-
     [[ -s /tmp/regions_\${shard_base}.txt ]] \\
       || { echo "ERROR: no regions for \${shard_base}" >&2; exit 1; }
 
     readarray -t regions < /tmp/regions_\${shard_base}.txt
 
     echo "--- running samtools view (\${shard_base}) ---"
-    echo "command: samtools view -@ \${samtools_threads} -b -o shards/\${shard_base}.bam ${tumor_bam} [regions...]"
     echo "region_arg_count=\${#regions[@]}"
 
     time samtools view \\
@@ -286,43 +269,182 @@ process subset_tumor_per_shard {
       "${tumor_bam}" \\
       "\${regions[@]}"
 
-    echo "samtools_view_exit=\$?"
-    echo "bam_bytes=\$(stat -c%s "shards/\${shard_base}.bam" 2>/dev/null || echo NA)"
-    echo "bam_size_human=\$(ls -lh "shards/\${shard_base}.bam" 2>/dev/null | awk '{print \$5}' || echo NA)"
-
     [[ -s "shards/\${shard_base}.bam" ]] \\
       || { echo "ERROR: BAM missing or empty for \${shard_base}" >&2; exit 1; }
 
     echo "--- running samtools index (\${shard_base}) ---"
-    echo "samtools_index_threads=0 (single-threaded by design)"
-
-    time samtools index \\
-      "shards/\${shard_base}.bam" \\
-
-    echo "bai_bytes=\$(stat -c%s "shards/\${shard_base}.bam.bai" 2>/dev/null || echo NA)"
-    echo "bai_size_human=\$(ls -lh "shards/\${shard_base}.bam.bai" 2>/dev/null | awk '{print \$5}' || echo NA)"
+    time samtools index "shards/\${shard_base}.bam"
 
     [[ -s "shards/\${shard_base}.bam.bai" ]] \\
       || { echo "ERROR: BAI missing or empty for \${shard_base}" >&2; exit 1; }
 
-    echo "top snapshot after shard:"
-    top -b -n 1 | head -20 || true
-    echo "end_time=\$(date)"
     echo "=== shard \${shard_base}: DONE ==="
     echo "============================================================"
   done
 
   echo
-  echo "=== Final shard listing ==="
+  echo "=== Final shard listing for this batch ==="
   ls -lah shards || true
   echo "BAM count:      \$(find shards -maxdepth 1 -name '*.bam'       | wc -l)"
   echo "BAI count:      \$(find shards -maxdepth 1 -name '*.bam.bai'   | wc -l)"
   echo "interval count: \$(find shards -maxdepth 1 -name '*.intervals' | wc -l)"
 
-  echo "=== subset_tumor_per_shard: END ==="
+  echo "=== subset_tumor_per_batch: END ==="
   date
   """
 }
+
+//4/12/26
+// process subset_tumor_per_shard {
+//   tag "${meta.id}"
+//   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+
+//   input:
+//     tuple val(meta), path(tumor_bam), path(tumor_bam_index)
+//     path interval_files
+
+//   output:
+//     path "shards/*.bam",          emit: shard_bams
+//     path "shards/*.bam.bai",      emit: shard_bais
+//     path "shards/*.intervals",    emit: shard_intervals
+//     path "tumor_sample_name.txt", emit: tumor_sample
+
+//   script:
+//   """
+//   set -euo pipefail
+//   mkdir -p shards
+
+//   echo "=== subset_tumor_per_shard: START ==="
+//   date
+//   echo "PWD=\$(pwd)"
+//   echo "hostname=\$(hostname || true)"
+//   echo "tumor_bam=${tumor_bam}"
+//   echo "tumor_bam_index=${tumor_bam_index}"
+//   echo "task.cpus=${task.cpus}"
+//   echo "task.memory=${task.memory ?: 'NA'}"
+//   echo "nproc=\$(nproc || true)"
+//   echo "bam_size=\$(ls -lh "${tumor_bam}" | awk '{print \$5}')"
+
+//   echo "=== SYSTEM INFO ==="
+//   uname -a || true
+//   lscpu || true
+//   free -h || true
+//   df -h || true
+
+//   echo "=== AWS METADATA (if available) ==="
+//   curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/instance-type || echo "instance-type unavailable"
+//   echo
+//   curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/local-hostname || echo "local-hostname unavailable"
+//   echo
+//   curl -s --connect-timeout 1 http://169.254.169.254/latest/meta-data/ami-id || echo "ami-id unavailable"
+//   echo
+
+//   samtools_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
+//   index_threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 0 ))
+
+//   echo "samtools_view_threads=\${samtools_threads}"
+//   echo "samtools_index_threads=\${index_threads}"
+//   echo "interval files present:"
+//   ls -1 *.intervals || true
+
+//   tumor_sample=\$(samtools view -H "${tumor_bam}" \\
+//     | awk -F'\\t' '/^@RG/ {
+//         for (i=1;i<=NF;i++)
+//           if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i }
+//       }' | sort -u)
+
+//   [[ -n "\$tumor_sample" ]] \\
+//     || { echo "ERROR: No SM tag in tumor BAM header" >&2; exit 1; }
+//   [[ \$(echo "\$tumor_sample" | wc -l) -eq 1 ]] \\
+//     || { echo "ERROR: Multiple SM values: \$tumor_sample" >&2; exit 1; }
+
+//   echo "\$tumor_sample" > tumor_sample_name.txt
+//   echo "tumor_sample=\$tumor_sample"
+
+//   total=\$(ls -1 *.intervals | wc -l)
+//   echo "total interval shards=\$total"
+
+//   shard_num=0
+
+//   for interval_file in *.intervals; do
+//     shard_num=\$(( shard_num + 1 ))
+//     shard_base=\$(basename "\$interval_file" .intervals)
+
+//     echo
+//     echo "============================================================"
+//     echo "--- processing shard \${shard_num}/\${total}: \${shard_base} ---"
+//     echo "start_time=\$(date)"
+//     echo "interval_file=\$interval_file"
+//     echo "disk before shard:"
+//     df -h . || true
+//     echo "memory before shard:"
+//     free -h || true
+//     echo "top snapshot before shard:"
+//     top -b -n 1 | head -20 || true
+
+//     cp "\$interval_file" "shards/\${shard_base}.intervals"
+
+//     grep -v '^@' "\$interval_file" \\
+//       | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' \\
+//       > /tmp/regions_\${shard_base}.txt
+
+//     echo "region_count=\$(wc -l < /tmp/regions_\${shard_base}.txt)"
+//     echo "first_region=\$(head -1 /tmp/regions_\${shard_base}.txt)"
+//     echo "last_region=\$(tail -1 /tmp/regions_\${shard_base}.txt)"
+
+//     [[ -s /tmp/regions_\${shard_base}.txt ]] \\
+//       || { echo "ERROR: no regions for \${shard_base}" >&2; exit 1; }
+
+//     readarray -t regions < /tmp/regions_\${shard_base}.txt
+
+//     echo "--- running samtools view (\${shard_base}) ---"
+//     echo "command: samtools view -@ \${samtools_threads} -b -o shards/\${shard_base}.bam ${tumor_bam} [regions...]"
+//     echo "region_arg_count=\${#regions[@]}"
+
+//     time samtools view \\
+//       -@ "\${samtools_threads}" \\
+//       -b \\
+//       -o "shards/\${shard_base}.bam" \\
+//       "${tumor_bam}" \\
+//       "\${regions[@]}"
+
+//     echo "samtools_view_exit=\$?"
+//     echo "bam_bytes=\$(stat -c%s "shards/\${shard_base}.bam" 2>/dev/null || echo NA)"
+//     echo "bam_size_human=\$(ls -lh "shards/\${shard_base}.bam" 2>/dev/null | awk '{print \$5}' || echo NA)"
+
+//     [[ -s "shards/\${shard_base}.bam" ]] \\
+//       || { echo "ERROR: BAM missing or empty for \${shard_base}" >&2; exit 1; }
+
+//     echo "--- running samtools index (\${shard_base}) ---"
+//     echo "samtools_index_threads=0 (single-threaded by design)"
+
+//     time samtools index \\
+//       "shards/\${shard_base}.bam" \\
+
+//     echo "bai_bytes=\$(stat -c%s "shards/\${shard_base}.bam.bai" 2>/dev/null || echo NA)"
+//     echo "bai_size_human=\$(ls -lh "shards/\${shard_base}.bam.bai" 2>/dev/null | awk '{print \$5}' || echo NA)"
+
+//     [[ -s "shards/\${shard_base}.bam.bai" ]] \\
+//       || { echo "ERROR: BAI missing or empty for \${shard_base}" >&2; exit 1; }
+
+//     echo "top snapshot after shard:"
+//     top -b -n 1 | head -20 || true
+//     echo "end_time=\$(date)"
+//     echo "=== shard \${shard_base}: DONE ==="
+//     echo "============================================================"
+//   done
+
+//   echo
+//   echo "=== Final shard listing ==="
+//   ls -lah shards || true
+//   echo "BAM count:      \$(find shards -maxdepth 1 -name '*.bam'       | wc -l)"
+//   echo "BAI count:      \$(find shards -maxdepth 1 -name '*.bam.bai'   | wc -l)"
+//   echo "interval count: \$(find shards -maxdepth 1 -name '*.intervals' | wc -l)"
+
+//   echo "=== subset_tumor_per_shard: END ==="
+//   date
+//   """
+// }
 
 process mutect_wrapper {
   label 'process_medium'
@@ -455,128 +577,6 @@ process mutect_wrapper {
   '''
 }
 
-// process mutect_wrapper {
-//   label 'process_medium'
-//   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
-//   stageInMode 'symlink'
-
-//   input:
-//     tuple(
-//       path(interval_shard),
-//       path(tumor_bam),
-//       path(tumor_bam_index),
-//       path(ref_fasta),
-//       path(ref_fai),
-//       path(ref_dict),
-//       path(germline_resource)
-//     )
-//     path normal_bam
-//     path normal_bam_index
-//     path alleles_vcf
-//     path alleles_vcf_tbi
-//     val  tumor_sample
-//     val  extra_args
-
-//   output:
-//     path "*.vcf.gz",     emit: vcf
-//     path "*.vcf.gz.tbi", emit: tbi
-//     path "versions.yml", emit: versions
-
-//   shell:
-//   '''
-//   set -euo pipefail
-
-//   shard_base=$(basename "!{interval_shard}" .intervals)
-//   tumor_bam="!{tumor_bam}"
-//   tumor_bam_index="!{tumor_bam_index}"
-//   interval_shard="!{interval_shard}"
-//   ref_fasta="!{ref_fasta}"
-//   ref_fai="!{ref_fai}"
-//   ref_dict="!{ref_dict}"
-//   germline_resource="!{germline_resource}"
-//   normal_bam="!{normal_bam}"
-//   normal_bam_index="!{normal_bam_index}"
-//   alleles_vcf="!{alleles_vcf}"
-//   alleles_vcf_tbi="!{alleles_vcf_tbi}"
-//   tumor_sample="!{tumor_sample}"
-//   extra_args="!{extra_args}"
-
-//   heap_mb="!{ Math.min(task.memory ? (task.memory.mega * 0.8).intValue() : 3072, 24000) }"
-
-//   echo "=== mutect_wrapper: START ==="
-//   echo "PWD=$(pwd)"
-//   echo "shard_base=${shard_base}"
-//   echo "tumor_bam=${tumor_bam}  size=$(ls -lah $tumor_bam | awk '{print $5}')"
-//   echo "interval_shard=${interval_shard}"
-//   echo "ref_fasta=${ref_fasta}"
-//   echo "germline_resource=${germline_resource}"
-//   echo "normal_bam=${normal_bam}"
-//   echo "alleles_vcf=${alleles_vcf}"
-//   echo "tumor_sample=${tumor_sample}"
-//   echo "heap_mb=${heap_mb}M"
-//   echo "extra_args='${extra_args}'"
-//   echo "Staged files:"
-//   ls -lah
-
-//   [[ -n "$tumor_sample" ]] || { echo "ERROR: tumor_sample is empty" >&2; exit 1; }
-
-//   # --- normal sample ---
-//   normal_args=""
-//   if [[ "$(basename "$normal_bam")" != "NO_NORMAL_BAM" ]]; then
-//     echo "Normal BAM provided: $normal_bam"
-//     normal_sample=$(samtools view -H "$normal_bam" \
-//       | awk -F'\t' '/^@RG/ { for (i=1;i<=NF;i++) if ($i ~ /^SM:/) { sub(/^SM:/,"",$i); print $i } }' \
-//       | sort -u)
-//     [[ -n "$normal_sample" ]] || { echo "ERROR: No SM tag found in normal BAM header" >&2; exit 1; }
-//     [[ $(echo "$normal_sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values in normal BAM" >&2; exit 1; }
-//     echo "normal_sample=${normal_sample}"
-//     normal_args="--input $normal_bam --normal-sample $normal_sample"
-//   else
-//     echo "NO_NORMAL_BAM sentinel -> tumor-only mode"
-//   fi
-
-//   # --- alleles ---
-//   alleles_args=""
-//   if [[ "$(basename "$alleles_vcf")" != "NO_ALLELES_VCF" ]]; then
-//     echo "Alleles VCF provided: $alleles_vcf"
-//     alleles_args="--alleles $alleles_vcf"
-//   else
-//     echo "NO_ALLELES_VCF sentinel -> no force-calling"
-//   fi
-
-//   # --- germline resource index ---
-//   echo "--- Checking germline resource index ---"
-//   if [[ ! -f "${germline_resource}.tbi" ]]; then
-//     echo "No .tbi found, creating with tabix..."
-//     tabix -f -p vcf "$germline_resource"
-//   fi
-//   test -s "${germline_resource}.tbi"
-//   echo "Germline resource index OK"
-
-//   out_prefix="out.${shard_base}"
-//   echo "=== Running Mutect2 (output: ${out_prefix}.vcf.gz) ==="
-
-//   gatk --java-options "-Xmx${heap_mb}M -XX:-UsePerfData" Mutect2 \
-//     --input "$tumor_bam" \
-//     ${normal_args} \
-//     --reference "$ref_fasta" \
-//     --germline-resource "$germline_resource" \
-//     --intervals "$interval_shard" \
-//     --tmp-dir . \
-//     --tumor-sample "$tumor_sample" \
-//     ${alleles_args} \
-//     ${extra_args} \
-//     --output "${out_prefix}.vcf.gz"
-
-//   echo "=== Mutect2 finished ==="
-//   echo "Output files:"
-//   ls -lah ${out_prefix}*
-
-//   ( gatk --version > versions.yml 2>&1 || echo "gatk --version failed (non-fatal)" > versions.yml )
-//   echo "=== mutect_wrapper: END ==="
-//   '''
-// }
-
 process gather_vcfs {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
@@ -621,6 +621,7 @@ process gather_vcfs {
   echo "=== gather_vcfs: END ==="
   """
 }
+
 workflow {
 
   log.info "=== WORKFLOW START ==="
@@ -647,29 +648,34 @@ workflow {
   log.info "normal_bam_val    : ${normal_bam_val}"
   log.info "alleles_vcf_val   : ${alleles_vcf_val}"
 
-  // localize full tumor BAM once, extract tumor sample once, create shard BAMs once
-  subset_res = subset_tumor_per_shard(
-    Channel.of([
-      [id: 'tumor'],
-      file(params.tumor_reads, checkIfExists: true),
-      file(params.tumor_reads_index, checkIfExists: true)
-    ]),
-    interval_res.interval_shards.collect()
-  )
-
-  tumor_sample_ch = subset_res.tumor_sample
-    .map { f ->
-      def s = f.text.trim()
-      if( !s )
-        error "Could not extract tumor sample name from tumor BAM header"
-      log.info "Tumor sample name: ${s}"
-      return s
-    }
+  tumor_sample_ch = get_tumor_sample_name(
+    file(params.tumor_reads, checkIfExists: true),
+    file(params.tumor_reads_index, checkIfExists: true)
+  ).tumor_sample
+    .map { it.trim() }
     .first()
 
+  def batch_size = (params.extract_batch_size ?: 20) as int
+  log.info "extract_batch_size: ${batch_size}"
+
+  
+
+  interval_batches_ch = interval_res.interval_shards
+    .buffer(size: batch_size)
+    .map { batch ->
+      tuple(
+        [id: "batch_${batch.first().baseName}_to_${batch.last().baseName}"],
+        tumor_bam_val,
+        tumor_bai_val,
+        batch
+      )
+    }
+
+  subset_res = subset_tumor_per_batch(interval_batches_ch)
+
   shard_bams_ch = subset_res.shard_bams
-  .flatten()
-  .map { f -> tuple(f.name.replaceFirst(/\.bam$/, ''), f) }
+    .flatten()
+    .map { f -> tuple(f.name.replaceFirst(/\.bam$/, ''), f) }
 
   shard_bais_ch = subset_res.shard_bais
     .flatten()
@@ -678,7 +684,6 @@ workflow {
   shard_intervals_ch = subset_res.shard_intervals
     .flatten()
     .map { f -> tuple(f.name.replaceFirst(/\.intervals$/, ''), f) }
-
 
   mutect_inputs_ch = shard_bams_ch
     .join(shard_bais_ch)
@@ -709,6 +714,98 @@ workflow {
   gather_vcfs(mutect_res.vcf.collect())
   log.info "=== WORKFLOW SUBMITTED ==="
 }
+
+// workflow {
+
+//   log.info "=== WORKFLOW START ==="
+//   log.info "tumor_reads       : ${params.tumor_reads}"
+//   log.info "scatter_count     : ${params.scatter_count}"
+//   log.info "normal_reads      : ${params.normal_reads ?: 'NOT PROVIDED (tumor-only)'}"
+//   log.info "force_call_file   : ${params.force_call_file ?: 'NOT PROVIDED'}"
+//   log.info "m2_extra_args     : ${params.m2_extra_args ?: 'NONE'}"
+//   log.info "gatk_docker       : ${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0 (default)'}"
+
+//   interval_res = split_intervals(
+//     file(params.ref_fasta, checkIfExists: true),
+//     file(params.ref_fai, checkIfExists: true),
+//     file(params.ref_dict, checkIfExists: true),
+//     file(params.intervals, checkIfExists: true),
+//     params.scatter_count as int
+//   )
+
+//   normal_bam_val      = params.normal_reads          ? file(params.normal_reads, checkIfExists: true)          : file(NO_NORMAL_BAM_PATH, checkIfExists: true)
+//   normal_bai_val      = params.normal_reads_index    ? file(params.normal_reads_index, checkIfExists: true)    : file(NO_NORMAL_BAI_PATH, checkIfExists: true)
+//   alleles_vcf_val     = params.force_call_file       ? file(params.force_call_file, checkIfExists: true)       : file(NO_ALLELES_VCF_PATH, checkIfExists: true)
+//   alleles_vcf_tbi_val = params.force_call_file_index ? file(params.force_call_file_index, checkIfExists: true) : file(NO_ALLELES_TBI_PATH, checkIfExists: true)
+
+//   log.info "normal_bam_val    : ${normal_bam_val}"
+//   log.info "alleles_vcf_val   : ${alleles_vcf_val}"
+
+//   // localize full tumor BAM once, extract tumor sample once, create shard BAMs once
+//   subset_res = subset_tumor_per_shard(
+//     Channel.of([
+//       [id: 'tumor'],
+//       file(params.tumor_reads, checkIfExists: true),
+//       file(params.tumor_reads_index, checkIfExists: true)
+//     ]),
+//     interval_res.interval_shards.collect()
+//   )
+
+//   tumor_sample_ch = subset_res.tumor_sample
+//     .map { f ->
+//       def s = f.text.trim()
+//       if( !s )
+//         error "Could not extract tumor sample name from tumor BAM header"
+//       log.info "Tumor sample name: ${s}"
+//       return s
+//     }
+//     .first()
+
+//   shard_bams_ch = subset_res.shard_bams
+//   .flatten()
+//   .map { f -> tuple(f.name.replaceFirst(/\.bam$/, ''), f) }
+
+//   shard_bais_ch = subset_res.shard_bais
+//     .flatten()
+//     .map { f -> tuple(f.name.replaceFirst(/\.bam\.bai$/, ''), f) }
+
+//   shard_intervals_ch = subset_res.shard_intervals
+//     .flatten()
+//     .map { f -> tuple(f.name.replaceFirst(/\.intervals$/, ''), f) }
+
+
+//   mutect_inputs_ch = shard_bams_ch
+//     .join(shard_bais_ch)
+//     .map { base, bam, bai -> tuple(base, bam, bai) }
+//     .join(shard_intervals_ch)
+//     .map { base, bam, bai, interval ->
+//       tuple(
+//         interval,
+//         bam,
+//         bai,
+//         file(params.ref_fasta, checkIfExists: true),
+//         file(params.ref_fai, checkIfExists: true),
+//         file(params.ref_dict, checkIfExists: true),
+//         file(params.germline_resource, checkIfExists: true)
+//       )
+//     }
+
+//   mutect_res = mutect_wrapper(
+//     mutect_inputs_ch,
+//     Channel.value(normal_bam_val),
+//     Channel.value(normal_bai_val),
+//     Channel.value(alleles_vcf_val),
+//     Channel.value(alleles_vcf_tbi_val),
+//     tumor_sample_ch,
+//     Channel.value(params.m2_extra_args ?: '')
+//   )
+
+//   gather_vcfs(mutect_res.vcf.collect())
+//   log.info "=== WORKFLOW SUBMITTED ==="
+// }
+
+
+
 // /*
 //  * --------------------------------------------
 //  * Defaults / params
