@@ -62,10 +62,10 @@ def main():
     tumor_bai = None
     normal_bam = None
     normal_bai = None
+    tumor_sample_name = None
 
-    # Simple rule: PBMC = normal, everything else = tumor
     for sample, files in bam_map.items():
-        if "PBMC" in sample.upper(): # switch on the sample type column "Status"
+        if "PBMC" in sample.upper():
             normal_bam = files["bam"]
             normal_bai = files["bai"]
         else:
@@ -76,18 +76,18 @@ def main():
     if not tumor_bam:
         raise ValueError("No tumor BAM found")
 
-    # Always set tumor
-    ds.add_param("tumor_reads", tumor_bam)
-    ds.add_param("tumor_reads_index", tumor_bai)
-    ds.add_param("tumor_sample_name", tumor_sample_name)
+    mutect_runs = [
+        {
+            "output_prefix": tumor_sample_name,
+            "tumor_reads": tumor_bam,
+            "tumor_reads_index": tumor_bai,
+            "normal_reads": normal_bam,
+            "normal_reads_index": normal_bai,
+            "tumor_sample_name": tumor_sample_name,
+        }
+    ]
 
-    # Only set normal if present
-    if normal_bam:
-        ds.add_param("normal_reads", normal_bam)
-        ds.add_param("normal_reads_index", normal_bai)
-        print("Matched normal detected.")
-    else:
-        print("No normal detected. Tumor-only mode.")
+    ds.add_param("mutect_runs", mutect_runs)
 
     print("\nFinal parameters:")
     print(json.dumps(ds.params, indent=2, default=str))
