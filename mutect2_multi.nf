@@ -242,8 +242,6 @@ workflow {
     params.scatter_count as int
   )
 
-  intervals_ready = interval_res.interval_shards
-    .collect()
 
   runs_ch = Channel.fromList(params.mutect_runs)
     .map { run ->
@@ -256,6 +254,8 @@ workflow {
             run.tumor_sample_name
         )
     }
+
+  intervals_ready = interval_res.interval_shards.collect()
 
   subset_res = subset_tumor_per_shard(
     runs_ch.map { meta, tbam, tbai, nbam, nbai, tsample ->
