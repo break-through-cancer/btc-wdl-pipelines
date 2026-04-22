@@ -242,6 +242,10 @@ workflow {
     params.scatter_count as int
   )
 
+  println "mutect_runs size = ${params.mutect_runs?.size()}"
+
+  Channel.fromList(params.mutect_runs)
+    .view { "RUN_RAW: ${it.output_prefix} :: ${it.tumor_reads}" }
 
   runs_ch = Channel.fromList(params.mutect_runs)
     .map { run ->
@@ -255,6 +259,8 @@ workflow {
         )
     }
 
+  runs_ch.view { "RUNS_CH: $it" }
+
   intervals_ready = interval_res.interval_shards.collect()
 
   subset_res = subset_tumor_per_shard(
@@ -263,6 +269,10 @@ workflow {
     },
     intervals_ready
   )
+
+  subset_res.shard_bams.view { "SHARD_BAMS_RAW: $it" }
+  subset_res.shard_bais.view { "SHARD_BAIS_RAW: $it" }
+  subset_res.shard_intervals.view { "SHARD_INTERVALS_RAW: $it" }
 
   shard_bams_ch = subset_res.shard_bams
     .transpose()
@@ -275,6 +285,10 @@ workflow {
   shard_intervals_ch = subset_res.shard_intervals
     .transpose()
     .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.intervals$/, ''), f) }
+
+  shard_bams_ch.view { "SHARD_BAMS: $it" }
+  shard_bais_ch.view { "SHARD_BAIS: $it" }
+  shard_intervals_ch.view { "SHARD_INTERVALS: $it" }
 
   mutect_inputs_ch = shard_bams_ch
     .join(shard_bais_ch,      by: [0, 1])
@@ -289,6 +303,8 @@ workflow {
         file(params.germline_resource, checkIfExists: true)
       )
     }
+
+  mutect_inputs_ch.view { "MUTECT_INPUT: $it" }
 
   normals_ch = runs_ch.map { meta, tbam, tbai, nbam, nbai, tsample ->
     def nbam_file = nbam ? file(nbam) : file(NO_NORMAL_BAM_PATH)
