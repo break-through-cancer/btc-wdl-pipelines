@@ -121,6 +121,7 @@ process mutect_wrapper {
 
   input:
     tuple(
+      val(sample_id),
       path(interval_shard),
       path(tumor_bam),
       path(tumor_bam_index),
@@ -137,9 +138,9 @@ process mutect_wrapper {
     val  extra_args
 
   output:
-    tuple val(tumor_sample), path("*.vcf.gz"),     emit: vcf
-    tuple val(tumor_sample), path("*.vcf.gz.tbi"), emit: tbi
-    path "versions.yml",                           emit: versions
+    tuple val(sample_id), path("*.vcf.gz"),     emit: vcf
+    tuple val(sample_id), path("*.vcf.gz.tbi"), emit: tbi
+    path "versions.yml",                        emit: versions
 
   shell:
   '''
@@ -269,85 +270,87 @@ workflow {
     },
     intervals_ready
   )
+    
+  subset_res.shard_bams.view      { "SHARD_BAMS_RAW: $it" }
+    subset_res.shard_bais.view      { "SHARD_BAIS_RAW: $it" }
+    subset_res.shard_intervals.view { "SHARD_INTERVALS_RAW: $it" }
 
-  subset_res.shard_bams.view { "SHARD_BAMS_RAW: $it" }
-  subset_res.shard_bais.view { "SHARD_BAIS_RAW: $it" }
-  subset_res.shard_intervals.view { "SHARD_INTERVALS_RAW: $it" }
+    shard_bams_ch = subset_res.shard_bams
+      .transpose()
+      .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.bam$/, ''), f) }
 
-  shard_bams_ch = subset_res.shard_bams
-    .transpose()
-    .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.bam$/, ''), f) }
+    shard_bais_ch = subset_res.shard_bais
+      .transpose()
+      .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.bam\.bai$/, ''), f) }
 
-  shard_bais_ch = subset_res.shard_bais
-    .transpose()
-    .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.bam\.bai$/, ''), f) }
+    shard_intervals_ch = subset_res.shard_intervals
+      .transpose()
+      .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.intervals$/, ''), f) }
 
-  shard_intervals_ch = subset_res.shard_intervals
-    .transpose()
-    .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.intervals$/, ''), f) }
+    shard_bams_ch.view      { "SHARD_BAMS: $it" }
+    shard_bais_ch.view      { "SHARD_BAIS: $it" }
+    shard_intervals_ch.view { "SHARD_INTERVALS: $it" }
 
-  shard_bams_ch.view { "SHARD_BAMS: $it" }
-  shard_bais_ch.view { "SHARD_BAIS: $it" }
-  shard_intervals_ch.view { "SHARD_INTERVALS: $it" }
+    mutect_inputs_ch = shard_bams_ch
+      .join(shard_bais_ch,      by: [0, 1])
+      .join(shard_intervals_ch, by: [0, 1])
+      .map { sid, base, bam, bai, interval ->
+        tuple(
+          sid,
+          interval, bam, bai,
+          file(params.ref_fasta,         checkIfExists: true),
+          file(params.ref_fai,           checkIfExists: true),
+          file(params.ref_dict,          checkIfExists: true),
+          file(params.germline_resource, checkIfExists: true)
+        )
+      }
 
-  mutect_inputs_ch = shard_bams_ch
-    .join(shard_bais_ch,      by: [0, 1])
-    .join(shard_intervals_ch, by: [0, 1])
-    .map { sid, base, bam, bai, interval ->
-      tuple(
-        sid,
-        interval, bam, bai,
-        file(params.ref_fasta,         checkIfExists: true),
-        file(params.ref_fai,           checkIfExists: true),
-        file(params.ref_dict,          checkIfExists: true),
-        file(params.germline_resource, checkIfExists: true)
-      )
+    mutect_inputs_ch.view { "MUTECT_INPUT: $it" }
+
+    normals_ch = runs_ch.map { meta, tbam, tbai, nbam, nbai, tsample ->
+      def nbam_file = nbam ? file(nbam) : file(NO_NORMAL_BAM_PATH)
+      def nbai_file = nbam ? file(nbai) : file(NO_NORMAL_BAI_PATH)
+      tuple(meta.id, nbam_file, nbai_file, tsample)
     }
 
-  mutect_inputs_ch.view { "MUTECT_INPUT: $it" }
+    mutect_inputs_ch
+      .join(normals_ch, by: 0)
+      .map { sid, interval, bam, bai, ref, fai, dict, germ, nbam, nbai, tsample ->
+        tuple(
+          sid,                                   // <-- carry sid through
+          tuple(interval, bam, bai, ref, fai, dict, germ),
+          nbam, nbai,
+          file(NO_ALLELES_VCF_PATH),
+          file(NO_ALLELES_TBI_PATH),
+          tsample,
+          params.m2_extra_args ?: ''
+        )
+      }
+      .multiMap { sid, main_tuple, nbam, nbai, alleles, alleles_tbi, tsample, extra ->
+          main:        tuple(sid, main_tuple[0], main_tuple[1], main_tuple[2], main_tuple[3], main_tuple[4], main_tuple[5], main_tuple[6])
+          nbam:        nbam
+          nbai:        nbai
+          alleles:     alleles
+          alleles_tbi: alleles_tbi
+          tsample:     tsample
+          extra:       extra
+      }
+      .set { mutect_split_ch }
 
-  normals_ch = runs_ch.map { meta, tbam, tbai, nbam, nbai, tsample ->
-    def nbam_file = nbam ? file(nbam) : file(NO_NORMAL_BAM_PATH)
-    def nbai_file = nbam ? file(nbai) : file(NO_NORMAL_BAI_PATH)
-    tuple(meta.id, nbam_file, nbai_file, tsample)
-  }
+    mutect_res = mutect_wrapper(
+      mutect_split_ch.main,
+      mutect_split_ch.nbam,
+      mutect_split_ch.nbai,
+      mutect_split_ch.alleles,
+      mutect_split_ch.alleles_tbi,
+      mutect_split_ch.tsample,
+      mutect_split_ch.extra
+    )
 
-  mutect_inputs_ch
-    .join(normals_ch, by: 0)
-    .map { sid, interval, bam, bai, ref, fai, dict, germ, nbam, nbai, tsample ->
-      tuple(
-        tuple(interval, bam, bai, ref, fai, dict, germ),
-        nbam, nbai,
-        file(NO_ALLELES_VCF_PATH),
-        file(NO_ALLELES_TBI_PATH),
-        tsample,
-        params.m2_extra_args ?: ''
-      )
-    }
-    .multiMap { main_tuple, nbam, nbai, alleles, alleles_tbi, tsample, extra ->
-        main:        main_tuple
-        nbam:        nbam
-        nbai:        nbai
-        alleles:     alleles
-        alleles_tbi: alleles_tbi
-        tsample:     tsample
-        extra:       extra
-    }
-    .set { mutect_split_ch }
+    mutect_res.vcf
+      .view { "MUTECT_VCF_OUT: $it" }
+      .groupTuple(size: params.scatter_count)
+      .set { grouped_vcfs_ch }
 
-  mutect_res = mutect_wrapper(
-    mutect_split_ch.main,
-    mutect_split_ch.nbam,
-    mutect_split_ch.nbai,
-    mutect_split_ch.alleles,
-    mutect_split_ch.alleles_tbi,
-    mutect_split_ch.tsample,
-    mutect_split_ch.extra
-  )
-
-  mutect_res.vcf
-    .groupTuple(size: params.scatter_count)
-    .set { grouped_vcfs_ch }
-
-  gather_vcfs(grouped_vcfs_ch)
+    gather_vcfs(grouped_vcfs_ch)
 }
