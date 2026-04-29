@@ -56,61 +56,47 @@ process split_intervals {
   """
 }
 
-process subset_tumor_per_shard {
-  tag "${meta.id}"
+process subset_tumor_one_shard {
+  tag "${meta.id}:${shard_id}"
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-    tuple val(meta), path(tumor_bam), path(tumor_bam_index)
-    path interval_files
+    tuple val(meta),
+          path(tumor_bam),
+          path(tumor_bam_index),
+          path(interval_file),
+          val(shard_id),
+          val(tumor_sample),
+          path(normal_bam),
+          path(normal_bam_index)
 
   output:
-    tuple val(meta.id), path("shards/*.bam"),          emit: shard_bams
-    tuple val(meta.id), path("shards/*.bam.bai"),      emit: shard_bais
-    tuple val(meta.id), path("shards/*.intervals"),    emit: shard_intervals
-    tuple val(meta.id), path("tumor_sample_name.txt"), emit: tumor_sample
+    tuple val(meta.id),
+          val(shard_id),
+          path("${meta.id}.${shard_id}.bam"),
+          path("${meta.id}.${shard_id}.bam.bai"),
+          path(interval_file),
+          val(tumor_sample),
+          path(normal_bam),
+          path(normal_bam_index),
+          emit: subsetted
 
   script:
   """
   set -euo pipefail
-  mkdir -p shards
 
-  tumor_sample=\$(samtools view -H "${tumor_bam}" \\
-    | awk -F'\\t' '/^@RG/ {
-        for (i=1;i<=NF;i++)
-          if (\$i ~ /^SM:/) { sub(/^SM:/,"",\$i); print \$i }
-      }' | sort -u)
+  grep -v '^@' "${interval_file}" \
+    | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' \
+    > regions.txt
 
-  [[ -n "\$tumor_sample" ]] \\
-    || { echo "ERROR: No SM tag in tumor BAM header" >&2; exit 1; }
-  [[ \$(echo "\$tumor_sample" | wc -l) -eq 1 ]] \\
-    || { echo "ERROR: Multiple SM values: \$tumor_sample" >&2; exit 1; }
+  samtools view \
+    -@ \$(( ${task.cpus} - 1 )) \
+    -b \
+    -o "${meta.id}.${shard_id}.bam" \
+    "${tumor_bam}" \
+    \$(cat regions.txt)
 
-  echo "\$tumor_sample" > tumor_sample_name.txt
-
-  for interval_file in *.intervals; do
-    shard_base=\$(basename "\$interval_file" .intervals)
-
-    cp "\$interval_file" "shards/\${shard_base}.intervals"
-
-    grep -v '^@' "\$interval_file" \\
-      | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' \\
-      > /tmp/regions_\${shard_base}.txt
-
-    [[ -s /tmp/regions_\${shard_base}.txt ]] \\
-      || { echo "ERROR: no regions for \${shard_base}" >&2; exit 1; }
-
-    readarray -t regions < /tmp/regions_\${shard_base}.txt
-
-    samtools view \\
-      -@ \$(( ${task.cpus} - 1 )) \\
-      -b \\
-      -o "shards/\${shard_base}.bam" \\
-      "${tumor_bam}" \\
-      "\${regions[@]}"
-
-    samtools index "shards/\${shard_base}.bam"
-  done
+  samtools index "${meta.id}.${shard_id}.bam"
   """
 }
 
@@ -235,6 +221,9 @@ process gather_vcfs {
 
 workflow {
 
+  /*
+   * 1. Split intervals → emit individual shard files
+   */
   interval_res = split_intervals(
     file(params.ref_fasta,  checkIfExists: true),
     file(params.ref_fai,    checkIfExists: true),
@@ -243,114 +232,106 @@ workflow {
     params.scatter_count as int
   )
 
-  println "mutect_runs size = ${params.mutect_runs?.size()}"
+  intervals_ch = interval_res.interval_shards
+    .flatten()
+    .map { f ->
+      def shard_id = f.name.replaceFirst(/\.intervals$/, '')
+      tuple(shard_id, f)
+    }
 
-  Channel.fromList(params.mutect_runs)
-    .view { "RUN_RAW: ${it.output_prefix} :: ${it.tumor_reads}" }
-
+  /*
+   * 2. Build sample channel
+   */
   runs_ch = Channel.fromList(params.mutect_runs)
     .map { run ->
-        tuple(
-            [id: run.output_prefix],
-            file(run.tumor_reads),
-            file(run.tumor_reads_index),
-            run.normal_reads       ?: null,
-            run.normal_reads_index ?: null,
-            run.tumor_sample_name
-        )
+
+      def nbam = run.normal_reads
+        ? file(run.normal_reads)
+        : file(NO_NORMAL_BAM_PATH)
+
+      def nbai = run.normal_reads_index
+        ? file(run.normal_reads_index)
+        : file(NO_NORMAL_BAI_PATH)
+
+      tuple(
+        [id: run.output_prefix],
+        file(run.tumor_reads),
+        file(run.tumor_reads_index),
+        run.tumor_sample_name,
+        nbam,
+        nbai
+      )
     }
 
-  runs_ch.view { "RUNS_CH: $it" }
+  /*
+   * 3. CROSS product: sample × shard
+   */
+  sample_shard_ch = runs_ch
+    .combine(intervals_ch)
+    .map { meta, tbam, tbai, tsample, nbam, nbai, shard_id, interval_file ->
+      tuple(meta, tbam, tbai, interval_file, shard_id, tsample, nbam, nbai)
+    }
 
-  intervals_ready = interval_res.interval_shards.collect()
+  /*
+   * 4. Subset BAM per (sample, shard)
+   */
+  subset_res = subset_tumor_one_shard(sample_shard_ch)
 
-  subset_res = subset_tumor_per_shard(
-    runs_ch.map { meta, tbam, tbai, nbam, nbai, tsample ->
-        tuple(meta, tbam, tbai)
-    },
-    intervals_ready
+  /*
+   * 5. Build Mutect inputs (already shard-parallel)
+   */
+  mutect_main_ch = subset_res.subsetted.map {
+    sid, shard_id, bam, bai, interval, tsample, nbam, nbai ->
+
+      tuple(
+        sid,
+        interval,
+        bam,
+        bai,
+        file(params.ref_fasta,         checkIfExists: true),
+        file(params.ref_fai,           checkIfExists: true),
+        file(params.ref_dict,          checkIfExists: true),
+        file(params.germline_resource, checkIfExists: true),
+        nbam,
+        nbai,
+        tsample
+      )
+  }
+
+  /*
+   * 6. Split inputs for mutect_wrapper signature
+   */
+  mutect_split_ch = mutect_main_ch.multiMap {
+    sid, interval, bam, bai, ref, fai, dict, germ, nbam, nbai, tsample ->
+
+      main:        tuple(sid, interval, bam, bai, ref, fai, dict, germ)
+      nbam:        nbam
+      nbai:        nbai
+      alleles:     file(NO_ALLELES_VCF_PATH)
+      alleles_tbi: file(NO_ALLELES_TBI_PATH)
+      tsample:     tsample
+      extra:       params.m2_extra_args ?: ''
+  }
+
+  /*
+   * 7. Run Mutect fully parallel (sample × shard)
+   */
+  mutect_res = mutect_wrapper(
+    mutect_split_ch.main,
+    mutect_split_ch.nbam,
+    mutect_split_ch.nbai,
+    mutect_split_ch.alleles,
+    mutect_split_ch.alleles_tbi,
+    mutect_split_ch.tsample,
+    mutect_split_ch.extra
   )
-    
-  subset_res.shard_bams.view      { "SHARD_BAMS_RAW: $it" }
-    subset_res.shard_bais.view      { "SHARD_BAIS_RAW: $it" }
-    subset_res.shard_intervals.view { "SHARD_INTERVALS_RAW: $it" }
 
-    shard_bams_ch = subset_res.shard_bams
-      .transpose()
-      .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.bam$/, ''), f) }
+  /*
+   * 8. Group per sample → gather VCFs
+   */
+  mutect_res.vcf
+    .groupTuple(size: params.scatter_count)
+    .set { grouped_vcfs_ch }
 
-    shard_bais_ch = subset_res.shard_bais
-      .transpose()
-      .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.bam\.bai$/, ''), f) }
-
-    shard_intervals_ch = subset_res.shard_intervals
-      .transpose()
-      .map { sid, f -> tuple(sid, f.name.replaceFirst(/\.intervals$/, ''), f) }
-
-    shard_bams_ch.view      { "SHARD_BAMS: $it" }
-    shard_bais_ch.view      { "SHARD_BAIS: $it" }
-    shard_intervals_ch.view { "SHARD_INTERVALS: $it" }
-
-    mutect_inputs_ch = shard_bams_ch
-      .join(shard_bais_ch,      by: [0, 1])
-      .join(shard_intervals_ch, by: [0, 1])
-      .map { sid, base, bam, bai, interval ->
-        tuple(
-          sid,
-          interval, bam, bai,
-          file(params.ref_fasta,         checkIfExists: true),
-          file(params.ref_fai,           checkIfExists: true),
-          file(params.ref_dict,          checkIfExists: true),
-          file(params.germline_resource, checkIfExists: true)
-        )
-      }
-
-    mutect_inputs_ch.view { "MUTECT_INPUT: $it" }
-
-    normals_ch = runs_ch.map { meta, tbam, tbai, nbam, nbai, tsample ->
-      def nbam_file = nbam ? file(nbam) : file(NO_NORMAL_BAM_PATH)
-      def nbai_file = nbam ? file(nbai) : file(NO_NORMAL_BAI_PATH)
-      tuple(meta.id, nbam_file, nbai_file, tsample)
-    }
-
-    mutect_inputs_ch
-      .join(normals_ch, by: 0)
-      .map { sid, interval, bam, bai, ref, fai, dict, germ, nbam, nbai, tsample ->
-        tuple(
-          sid,                                   // <-- carry sid through
-          tuple(interval, bam, bai, ref, fai, dict, germ),
-          nbam, nbai,
-          file(NO_ALLELES_VCF_PATH),
-          file(NO_ALLELES_TBI_PATH),
-          tsample,
-          params.m2_extra_args ?: ''
-        )
-      }
-      .multiMap { sid, main_tuple, nbam, nbai, alleles, alleles_tbi, tsample, extra ->
-          main:        tuple(sid, main_tuple[0], main_tuple[1], main_tuple[2], main_tuple[3], main_tuple[4], main_tuple[5], main_tuple[6])
-          nbam:        nbam
-          nbai:        nbai
-          alleles:     alleles
-          alleles_tbi: alleles_tbi
-          tsample:     tsample
-          extra:       extra
-      }
-      .set { mutect_split_ch }
-
-    mutect_res = mutect_wrapper(
-      mutect_split_ch.main,
-      mutect_split_ch.nbam,
-      mutect_split_ch.nbai,
-      mutect_split_ch.alleles,
-      mutect_split_ch.alleles_tbi,
-      mutect_split_ch.tsample,
-      mutect_split_ch.extra
-    )
-
-    mutect_res.vcf
-      .view { "MUTECT_VCF_OUT: $it" }
-      .groupTuple(size: params.scatter_count)
-      .set { grouped_vcfs_ch }
-
-    gather_vcfs(grouped_vcfs_ch)
+  gather_vcfs(grouped_vcfs_ch)
 }
