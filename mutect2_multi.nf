@@ -73,7 +73,6 @@ process subset_tumor_all_shards {
     tuple val(meta.id),
           path("subset_bams/*.bam"),
           path("subset_bams/*.bam.bai"),
-          path("intervals/*.intervals"),
           val(tumor_sample),
           path(normal_bam),
           path(normal_bam_index),
@@ -280,48 +279,49 @@ workflow {
   /*
    * 4. Flatten each sample's 100 BAMs into 100 Mutect2 jobs.
    */
-  mutect_main_ch = subset_res.subsetted
-    .flatMap { sid, bams, bais, intervals, tsample, nbam, nbai ->
+mutect_main_ch = subset_res.subsetted
+  .combine(intervals_ch)
+  .flatMap { sid, bams, bais, tsample, nbam, nbai, intervals ->
 
-      def bam_list = bams instanceof List ? bams : [bams]
-      def bai_list = bais instanceof List ? bais : [bais]
-      def int_list = intervals instanceof List ? intervals : [intervals]
+    def bam_list = bams instanceof List ? bams : [bams]
+    def bai_list = bais instanceof List ? bais : [bais]
+    def int_list = intervals instanceof List ? intervals : [intervals]
 
-      def intervals_by_shard = int_list.collectEntries { int_file ->
-        def shard = int_file.name.replaceFirst(/\.intervals$/, '')
-        [(shard): int_file]
-      }
-
-      bam_list.collect { bam ->
-
-        def shard_id = bam.name
-          .replaceFirst("^${java.util.regex.Pattern.quote(sid)}\\.", "")
-          .replaceFirst(/\.bam$/, "")
-
-        def bai = bai_list.find { it.name == bam.name + ".bai" }
-        def interval = intervals_by_shard[shard_id]
-
-        if( bai == null )
-          error "Could not find BAI for ${bam.name}"
-
-        if( interval == null )
-          error "Could not find interval shard for ${bam.name}; inferred shard_id=${shard_id}"
-
-        tuple(
-          sid,
-          interval,
-          bam,
-          bai,
-          file(params.ref_fasta,         checkIfExists: true),
-          file(params.ref_fai,           checkIfExists: true),
-          file(params.ref_dict,          checkIfExists: true),
-          file(params.germline_resource, checkIfExists: true),
-          nbam,
-          nbai,
-          tsample
-        )
-      }
+    def intervals_by_shard = int_list.collectEntries { int_file ->
+      def shard = int_file.name.replaceFirst(/\.intervals$/, '')
+      [(shard): int_file]
     }
+
+    bam_list.collect { bam ->
+
+      def shard_id = bam.name
+        .replaceFirst("^${java.util.regex.Pattern.quote(sid)}\\.", "")
+        .replaceFirst(/\.bam$/, "")
+
+      def bai = bai_list.find { it.name == bam.name + ".bai" }
+      def interval = intervals_by_shard[shard_id]
+
+      if( bai == null )
+        error "Could not find BAI for ${bam.name}"
+
+      if( interval == null )
+        error "Could not find interval shard for ${bam.name}; inferred shard_id=${shard_id}"
+
+      tuple(
+        sid,
+        interval,
+        bam,
+        bai,
+        file(params.ref_fasta,         checkIfExists: true),
+        file(params.ref_fai,           checkIfExists: true),
+        file(params.ref_dict,          checkIfExists: true),
+        file(params.germline_resource, checkIfExists: true),
+        nbam,
+        nbai,
+        tsample
+      )
+    }
+  }
 
   /*
    * 5. Split inputs for mutect_wrapper signature
