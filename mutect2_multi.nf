@@ -78,20 +78,36 @@ process subset_tumor_all_shards {
           path(normal_bam_index),
           emit: subsetted
 
-  script:
+    script:
   """
   set -euo pipefail
 
   mkdir -p subset_bams regions
 
+  echo "=== subset_tumor_all_shards START ==="
+  echo "sample=${meta.id}"
+  echo "tumor_bam=${tumor_bam}"
+  ls -lh "${tumor_bam}" || true
+  echo "interval count:"
+  ls intervals/*.intervals | wc -l
+  echo "first intervals:"
+  ls intervals/*.intervals | head
+
   threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 1 ))
+  echo "threads=\$threads"
 
   for interval_file in intervals/*.intervals; do
     shard_id=\$(basename "\$interval_file" .intervals)
 
+    echo "=== START shard=\${shard_id} at \$(date) ==="
+
     grep -v '^@' "\$interval_file" \
       | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' \
       > "regions/\${shard_id}.regions.txt"
+
+    echo "region count for \${shard_id}:"
+    wc -l "regions/\${shard_id}.regions.txt"
+    head "regions/\${shard_id}.regions.txt" || true
 
     samtools view \
       -@ "\$threads" \
@@ -101,7 +117,15 @@ process subset_tumor_all_shards {
       \$(cat "regions/\${shard_id}.regions.txt")
 
     samtools index "subset_bams/${meta.id}.\${shard_id}.bam"
+
+    echo "=== DONE shard=\${shard_id} at \$(date) ==="
+    ls -lh "subset_bams/${meta.id}.\${shard_id}.bam" "subset_bams/${meta.id}.\${shard_id}.bam.bai"
   done
+
+  echo "=== FINAL COUNTS ==="
+  ls subset_bams/*.bam | wc -l
+  ls subset_bams/*.bam.bai | wc -l
+  echo "=== subset_tumor_all_shards DONE ==="
   """
 }
 process mutect_wrapper {
