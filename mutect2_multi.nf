@@ -55,27 +55,25 @@ process split_intervals {
     -O scattered
   """
 }
-
-process subset_tumor_one_shard {
-  tag "${meta.id}:${shard_id}"
+process subset_tumor_all_shards {
+  tag "${meta.id}"
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
     tuple val(meta),
           path(tumor_bam),
           path(tumor_bam_index),
-          path(interval_file),
-          val(shard_id),
           val(tumor_sample),
           path(normal_bam),
           path(normal_bam_index)
 
+    path interval_files, stageAs: 'intervals/*'
+
   output:
     tuple val(meta.id),
-          val(shard_id),
-          path("${meta.id}.${shard_id}.bam"),
-          path("${meta.id}.${shard_id}.bam.bai"),
-          path(interval_file),
+          path("subset_bams/*.bam"),
+          path("subset_bams/*.bam.bai"),
+          path("intervals/*.intervals"),
           val(tumor_sample),
           path(normal_bam),
           path(normal_bam_index),
@@ -85,21 +83,28 @@ process subset_tumor_one_shard {
   """
   set -euo pipefail
 
-  grep -v '^@' "${interval_file}" \
-    | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' \
-    > regions.txt
+  mkdir -p subset_bams regions
 
-  samtools view \
-    -@ \$(( ${task.cpus} - 1 )) \
-    -b \
-    -o "${meta.id}.${shard_id}.bam" \
-    "${tumor_bam}" \
-    \$(cat regions.txt)
+  threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 1 ))
 
-  samtools index "${meta.id}.${shard_id}.bam"
+  for interval_file in intervals/*.intervals; do
+    shard_id=\$(basename "\$interval_file" .intervals)
+
+    grep -v '^@' "\$interval_file" \
+      | awk 'NF>=3 {print \$1":"\$2+1"-"\$3}' \
+      > "regions/\${shard_id}.regions.txt"
+
+    samtools view \
+      -@ "\$threads" \
+      -b \
+      -o "subset_bams/${meta.id}.\${shard_id}.bam" \
+      "${tumor_bam}" \
+      \$(cat "regions/\${shard_id}.regions.txt")
+
+    samtools index "subset_bams/${meta.id}.\${shard_id}.bam"
+  done
   """
 }
-
 process mutect_wrapper {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
@@ -218,11 +223,10 @@ process gather_vcfs {
   fi
   """
 }
-
 workflow {
 
   /*
-   * 1. Split intervals → emit individual shard files
+   * 1. Split intervals once
    */
   interval_res = split_intervals(
     file(params.ref_fasta,  checkIfExists: true),
@@ -232,12 +236,13 @@ workflow {
     params.scatter_count as int
   )
 
+  /*
+   * Collect all interval shards into one list.
+   * This lets each sample have ONE subsetting task that loops over all shards.
+   */
   intervals_ch = interval_res.interval_shards
     .flatten()
-    .map { f ->
-      def shard_id = f.name.replaceFirst(/\.intervals$/, '')
-      tuple(shard_id, f)
-    }
+    .collect()
 
   /*
    * 2. Build sample channel
@@ -264,42 +269,62 @@ workflow {
     }
 
   /*
-   * 3. CROSS product: sample × shard
+   * 3. ONE subsetting task per sample.
+   * Each task outputs 100 subset BAMs if scatter_count = 100.
    */
-  sample_shard_ch = runs_ch
-    .combine(intervals_ch)
-    .map { meta, tbam, tbai, tsample, nbam, nbai, shard_id, interval_file ->
-      tuple(meta, tbam, tbai, interval_file, shard_id, tsample, nbam, nbai)
+  subset_res = subset_tumor_all_shards(
+    runs_ch,
+    intervals_ch
+  )
+
+  /*
+   * 4. Flatten each sample's 100 BAMs into 100 Mutect2 jobs.
+   */
+  mutect_main_ch = subset_res.subsetted
+    .flatMap { sid, bams, bais, intervals, tsample, nbam, nbai ->
+
+      def bam_list = bams instanceof List ? bams : [bams]
+      def bai_list = bais instanceof List ? bais : [bais]
+      def int_list = intervals instanceof List ? intervals : [intervals]
+
+      def intervals_by_shard = int_list.collectEntries { int_file ->
+        def shard = int_file.name.replaceFirst(/\.intervals$/, '')
+        [(shard): int_file]
+      }
+
+      bam_list.collect { bam ->
+
+        def shard_id = bam.name
+          .replaceFirst("^${java.util.regex.Pattern.quote(sid)}\\.", "")
+          .replaceFirst(/\.bam$/, "")
+
+        def bai = bai_list.find { it.name == bam.name + ".bai" }
+        def interval = intervals_by_shard[shard_id]
+
+        if( bai == null )
+          error "Could not find BAI for ${bam.name}"
+
+        if( interval == null )
+          error "Could not find interval shard for ${bam.name}; inferred shard_id=${shard_id}"
+
+        tuple(
+          sid,
+          interval,
+          bam,
+          bai,
+          file(params.ref_fasta,         checkIfExists: true),
+          file(params.ref_fai,           checkIfExists: true),
+          file(params.ref_dict,          checkIfExists: true),
+          file(params.germline_resource, checkIfExists: true),
+          nbam,
+          nbai,
+          tsample
+        )
+      }
     }
 
   /*
-   * 4. Subset BAM per (sample, shard)
-   */
-  subset_res = subset_tumor_one_shard(sample_shard_ch)
-
-  /*
-   * 5. Build Mutect inputs (already shard-parallel)
-   */
-  mutect_main_ch = subset_res.subsetted.map {
-    sid, shard_id, bam, bai, interval, tsample, nbam, nbai ->
-
-      tuple(
-        sid,
-        interval,
-        bam,
-        bai,
-        file(params.ref_fasta,         checkIfExists: true),
-        file(params.ref_fai,           checkIfExists: true),
-        file(params.ref_dict,          checkIfExists: true),
-        file(params.germline_resource, checkIfExists: true),
-        nbam,
-        nbai,
-        tsample
-      )
-  }
-
-  /*
-   * 6. Split inputs for mutect_wrapper signature
+   * 5. Split inputs for mutect_wrapper signature
    */
   mutect_split_ch = mutect_main_ch.multiMap {
     sid, interval, bam, bai, ref, fai, dict, germ, nbam, nbai, tsample ->
@@ -314,7 +339,7 @@ workflow {
   }
 
   /*
-   * 7. Run Mutect fully parallel (sample × shard)
+   * 6. Run Mutect2 once per subset BAM.
    */
   mutect_res = mutect_wrapper(
     mutect_split_ch.main,
@@ -327,7 +352,7 @@ workflow {
   )
 
   /*
-   * 8. Group per sample → gather VCFs
+   * 7. Group per sample and gather.
    */
   mutect_res.vcf
     .groupTuple(size: params.scatter_count)
