@@ -260,12 +260,25 @@ workflow {
   )
 
   /*
-   * Collect all interval shards into one list.
-   * This lets each sample have ONE subsetting task that loops over all shards.
+   * Collect all interval shards for later matching BAMs back to intervals.
    */
-  intervals_ch = interval_res.interval_shards
+  all_intervals_ch = interval_res.interval_shards
     .flatten()
     .collect()
+
+  /*
+   * Batch interval shards for subsetting.
+   * Example:
+   *   scatter_count = 100
+   *   extract_batch_size = 10
+   *   => 10 subsetting tasks per sample
+   */
+  interval_batches_ch = interval_res.interval_shards
+    .flatten()
+    .toSortedList { a, b -> a.name <=> b.name }
+    .flatMap { intervals ->
+      intervals.collate(params.extract_batch_size as int)
+    }
 
   /*
    * 2. Build sample channel
@@ -292,60 +305,60 @@ workflow {
     }
 
   /*
-   * 3. ONE subsetting task per sample.
-   * Each task outputs 100 subset BAMs if scatter_count = 100.
+   * 3. Subset tumor BAMs in batches.
+   * This still uses your existing process name: subset_tumor_all_shards.
    */
   subset_res = subset_tumor_all_shards(
     runs_ch,
-    intervals_ch
+    interval_batches_ch
   )
 
   /*
-   * 4. Flatten each sample's 100 BAMs into 100 Mutect2 jobs.
+   * 4. Flatten each batch's subset BAMs into Mutect2 jobs.
    */
-mutect_main_ch = subset_res.subsetted
-  .combine(intervals_ch)
-  .flatMap { sid, bams, bais, tsample, nbam, nbai, intervals ->
+  mutect_main_ch = subset_res.subsetted
+    .combine(all_intervals_ch)
+    .flatMap { sid, bams, bais, tsample, nbam, nbai, intervals ->
 
-    def bam_list = bams instanceof List ? bams : [bams]
-    def bai_list = bais instanceof List ? bais : [bais]
-    def int_list = intervals instanceof List ? intervals : [intervals]
+      def bam_list = bams instanceof List ? bams : [bams]
+      def bai_list = bais instanceof List ? bais : [bais]
+      def int_list = intervals instanceof List ? intervals : [intervals]
 
-    def intervals_by_shard = int_list.collectEntries { int_file ->
-      def shard = int_file.name.replaceFirst(/\.intervals$/, '')
-      [(shard): int_file]
+      def intervals_by_shard = int_list.collectEntries { int_file ->
+        def shard = int_file.name.replaceFirst(/\.intervals$/, '')
+        [(shard): int_file]
+      }
+
+      bam_list.collect { bam ->
+
+        def shard_id = bam.name
+          .replaceFirst("^${java.util.regex.Pattern.quote(sid)}\\.", "")
+          .replaceFirst(/\.bam$/, "")
+
+        def bai = bai_list.find { it.name == bam.name + ".bai" }
+        def interval = intervals_by_shard[shard_id]
+
+        if( bai == null )
+          error "Could not find BAI for ${bam.name}"
+
+        if( interval == null )
+          error "Could not find interval shard for ${bam.name}; inferred shard_id=${shard_id}"
+
+        tuple(
+          sid,
+          interval,
+          bam,
+          bai,
+          file(params.ref_fasta,         checkIfExists: true),
+          file(params.ref_fai,           checkIfExists: true),
+          file(params.ref_dict,          checkIfExists: true),
+          file(params.germline_resource, checkIfExists: true),
+          nbam,
+          nbai,
+          tsample
+        )
+      }
     }
-
-    bam_list.collect { bam ->
-
-      def shard_id = bam.name
-        .replaceFirst("^${java.util.regex.Pattern.quote(sid)}\\.", "")
-        .replaceFirst(/\.bam$/, "")
-
-      def bai = bai_list.find { it.name == bam.name + ".bai" }
-      def interval = intervals_by_shard[shard_id]
-
-      if( bai == null )
-        error "Could not find BAI for ${bam.name}"
-
-      if( interval == null )
-        error "Could not find interval shard for ${bam.name}; inferred shard_id=${shard_id}"
-
-      tuple(
-        sid,
-        interval,
-        bam,
-        bai,
-        file(params.ref_fasta,         checkIfExists: true),
-        file(params.ref_fai,           checkIfExists: true),
-        file(params.ref_dict,          checkIfExists: true),
-        file(params.germline_resource, checkIfExists: true),
-        nbam,
-        nbai,
-        tsample
-      )
-    }
-  }
 
   /*
    * 5. Split inputs for mutect_wrapper signature
@@ -379,7 +392,7 @@ mutect_main_ch = subset_res.subsetted
    * 7. Group per sample and gather.
    */
   mutect_res.vcf
-    .groupTuple(size: params.scatter_count)
+    .groupTuple(size: params.scatter_count as int)
     .set { grouped_vcfs_ch }
 
   gather_vcfs(grouped_vcfs_ch)
