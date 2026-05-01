@@ -60,25 +60,25 @@ process subset_tumor_all_shards {
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-    tuple val(meta),
-          path(tumor_bam),
-          path(tumor_bam_index),
-          val(tumor_sample),
-          path(normal_bam),
-          path(normal_bam_index)
-
-    path interval_files, stageAs: 'intervals/*'
+  tuple val(meta),
+        path(tumor_bam),
+        path(tumor_bam_index),
+        val(tumor_sample),
+        path(normal_bam),
+        path(normal_bam_index),
+        path(interval_files, stageAs: 'intervals/*')
 
   output:
-    tuple val(meta.id),
-          path("subset_bams/*.bam"),
-          path("subset_bams/*.bam.bai"),
-          val(tumor_sample),
-          path(normal_bam),
-          path(normal_bam_index),
-          emit: subsetted
+  tuple val(meta.id),
+        path("subset_bams/*.bam"),
+        path("subset_bams/*.bam.bai"),
+        val(tumor_sample),
+        path(normal_bam),
+        path(normal_bam_index),
+        path("intervals/*.intervals"),
+        emit: subsetted
 
-    script:
+  script:
   """
   set -euo pipefail
 
@@ -304,20 +304,33 @@ workflow {
       )
     }
 
-  /*
-   * 3. Subset tumor BAMs in batches.
-   * This still uses your existing process name: subset_tumor_all_shards.
+    /*
+   * 3. Make every sample run against every interval batch.
+   * This is the key fix.
    */
-  subset_res = subset_tumor_all_shards(
-    runs_ch,
-    interval_batches_ch
-  )
+  sample_batches_ch = runs_ch
+    .combine(interval_batches_ch)
+    .map { run_tuple, interval_batch ->
+      tuple(
+        run_tuple[0],   // meta
+        run_tuple[1],   // tumor bam
+        run_tuple[2],   // tumor bai
+        run_tuple[3],   // tumor sample
+        run_tuple[4],   // normal bam
+        run_tuple[5],   // normal bai
+        interval_batch  // this batch of intervals
+      )
+    }
 
   /*
-   * 4. Flatten each batch's subset BAMs into Mutect2 jobs.
+   * 4. Subset tumor BAMs in batches.
+   */
+  subset_res = subset_tumor_all_shards(sample_batches_ch)
+
+  /*
+   * 5. Flatten each batch's subset BAMs into Mutect2 jobs.
    */
   mutect_main_ch = subset_res.subsetted
-    .combine(all_intervals_ch)
     .flatMap { sid, bams, bais, tsample, nbam, nbai, intervals ->
 
       def bam_list = bams instanceof List ? bams : [bams]
@@ -361,7 +374,8 @@ workflow {
     }
 
   /*
-   * 5. Split inputs for mutect_wrapper signature
+   * 6. Split inputs for mutect_wrapper signature.
+   * This version actually uses force_call_file if provided.
    */
   mutect_split_ch = mutect_main_ch.multiMap {
     sid, interval, bam, bai, ref, fai, dict, germ, nbam, nbai, tsample ->
@@ -369,14 +383,18 @@ workflow {
       main:        tuple(sid, interval, bam, bai, ref, fai, dict, germ)
       nbam:        nbam
       nbai:        nbai
-      alleles:     file(NO_ALLELES_VCF_PATH)
-      alleles_tbi: file(NO_ALLELES_TBI_PATH)
+      alleles:     params.force_call_file
+                     ? file(params.force_call_file, checkIfExists: true)
+                     : file(NO_ALLELES_VCF_PATH)
+      alleles_tbi: params.force_call_file_index
+                     ? file(params.force_call_file_index, checkIfExists: true)
+                     : file(NO_ALLELES_TBI_PATH)
       tsample:     tsample
       extra:       params.m2_extra_args ?: ''
   }
 
   /*
-   * 6. Run Mutect2 once per subset BAM.
+   * 7. Run Mutect2 once per subset BAM.
    */
   mutect_res = mutect_wrapper(
     mutect_split_ch.main,
@@ -389,7 +407,7 @@ workflow {
   )
 
   /*
-   * 7. Group per sample and gather.
+   * 8. Group per sample and gather.
    */
   mutect_res.vcf
     .groupTuple(size: params.scatter_count as int)
