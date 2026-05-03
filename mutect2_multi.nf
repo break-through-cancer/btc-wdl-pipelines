@@ -71,7 +71,7 @@ process subset_tumor_all_shards {
   output:
     path("subset_bams/*.bam"),     emit: shard_bams
     path("subset_bams/*.bam.bai"), emit: shard_bais
-    path("intervals/*.intervals"), emit: shard_intervals
+    path("out_intervals/*.intervals"), emit: shard_intervals
     tuple val(meta.id),
           val(tumor_sample),
           path(normal_bam),
@@ -82,7 +82,8 @@ process subset_tumor_all_shards {
   """
   set -euo pipefail
 
-  mkdir -p subset_bams regions
+  mkdir -p subset_bams regions out_intervals
+  cp intervals/*.intervals out_intervals/
 
   echo "=== subset_tumor_all_shards START ==="
   echo "sample=${meta.id}"
