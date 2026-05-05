@@ -179,7 +179,22 @@ process mutect_wrapper {
   normal_bam_index="!{normal_bam_index}"
   alleles_vcf="!{alleles_vcf}"
   alleles_vcf_tbi="!{alleles_vcf_tbi}"
-  tumor_sample="!{tumor_sample}"
+  tumor_sample=$(samtools view -H "$tumor_bam" \
+    | awk -F'\t' '/^@RG/ {
+        for (i=1;i<=NF;i++) {
+          if ($i ~ /^SM:/) {
+            sub(/^SM:/,"",$i);
+            print $i
+          }
+        }
+      }' \
+    | sort -u)
+
+  [[ -n "$tumor_sample" ]] || { echo "ERROR: No SM tag found in tumor BAM header" >&2; exit 1; }
+  [[ $(echo "$tumor_sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple tumor SM values: $tumor_sample" >&2; exit 1; }
+
+  echo "Using tumor sample from BAM header: $tumor_sample"
+
   extra_args="!{extra_args}"
 
   heap_mb="!{ Math.min(task.memory ? (task.memory.mega * 0.8).intValue() : 3072, 24000) }"
