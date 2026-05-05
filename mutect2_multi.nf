@@ -55,28 +55,29 @@ process split_intervals {
     -O scattered
   """
 }
+
 process subset_tumor_all_shards {
   tag "${meta.id}"
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   input:
-  tuple val(meta),
-        path(tumor_bam),
-        path(tumor_bam_index),
-        val(tumor_sample),
-        path(normal_bam),
-        path(normal_bam_index),
-        path(interval_files, stageAs: 'intervals/*')
+    tuple val(meta),
+          path(tumor_bam),
+          path(tumor_bam_index),
+          val(tumor_sample),
+          path(normal_bam),
+          path(normal_bam_index),
+          path(interval_files, stageAs: 'intervals/*')
 
   output:
-    path("subset_bams/*.bam"),     emit: shard_bams
-    path("subset_bams/*.bam.bai"), emit: shard_bais
-    path("out_intervals/*.intervals"), emit: shard_intervals
     tuple val(meta.id),
           val(tumor_sample),
           path(normal_bam),
           path(normal_bam_index),
-          emit: sample_meta
+          path("subset_bams/*.bam"),
+          path("subset_bams/*.bam.bai"),
+          path("out_intervals/*.intervals"),
+          emit: shards
 
   script:
   """
@@ -89,8 +90,10 @@ process subset_tumor_all_shards {
   echo "sample=${meta.id}"
   echo "tumor_bam=${tumor_bam}"
   ls -lh "${tumor_bam}" || true
+
   echo "interval count:"
   ls intervals/*.intervals | wc -l
+
   echo "first intervals:"
   ls intervals/*.intervals | head
 
@@ -124,11 +127,16 @@ process subset_tumor_all_shards {
   done
 
   echo "=== FINAL COUNTS ==="
+  echo -n "BAMs: "
   ls subset_bams/*.bam | wc -l
+  echo -n "BAIs: "
   ls subset_bams/*.bam.bai | wc -l
+  echo -n "Intervals: "
+  ls out_intervals/*.intervals | wc -l
   echo "=== subset_tumor_all_shards DONE ==="
   """
 }
+
 process mutect_wrapper {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
@@ -176,6 +184,13 @@ process mutect_wrapper {
 
   heap_mb="!{ Math.min(task.memory ? (task.memory.mega * 0.8).intValue() : 3072, 24000) }"
 
+  echo "=== mutect_wrapper START ==="
+  echo "sample_id=!{sample_id}"
+  echo "interval_shard=$interval_shard"
+  echo "tumor_bam=$tumor_bam"
+  echo "tumor_bam_index=$tumor_bam_index"
+  echo "tumor_sample=$tumor_sample"
+
   [[ -n "$tumor_sample" ]] || { echo "ERROR: tumor_sample is empty" >&2; exit 1; }
 
   normal_args=""
@@ -186,6 +201,7 @@ process mutect_wrapper {
     [[ -n "$normal_sample" ]] || { echo "ERROR: No SM tag found in normal BAM header" >&2; exit 1; }
     [[ $(echo "$normal_sample" | wc -l) -eq 1 ]] || { echo "ERROR: Multiple SM values in normal BAM" >&2; exit 1; }
     normal_args="--input $normal_bam --normal-sample $normal_sample"
+    echo "normal_sample=$normal_sample"
   fi
 
   alleles_args=""
@@ -213,6 +229,8 @@ process mutect_wrapper {
     --output "${out_prefix}.vcf.gz"
 
   ( gatk --version > versions.yml 2>&1 || echo "gatk --version failed (non-fatal)" > versions.yml )
+
+  echo "=== mutect_wrapper DONE ==="
   '''
 }
 
@@ -245,6 +263,7 @@ process gather_vcfs {
   fi
   """
 }
+
 workflow {
 
   /*
@@ -260,7 +279,6 @@ workflow {
 
   /*
    * 2. Batch interval shards for subsetting.
-   * This follows the one-sample pattern: each item is one batch of intervals.
    */
   def batch_size = (params.extract_batch_size ?: 10) as int
 
@@ -272,8 +290,7 @@ workflow {
     }
 
   /*
-   * 3. Create one subsetting task per sample per interval batch.
-   * We do not use combine here, because combine can spread tuple/list contents.
+   * 3. One subsetting task per sample per interval batch.
    */
   sample_batches_ch = interval_batches_ch
     .flatMap { interval_batch ->
@@ -300,135 +317,80 @@ workflow {
     }
 
   /*
-   * 4. Subset tumor BAMs by sample and interval batch.
-   * The process names outputs as: ${sample_id}.${shard_id}.bam
+   * 4. Subset tumor BAMs.
    */
   subset_res = subset_tumor_all_shards(sample_batches_ch)
 
   /*
-   * 5. Build keyed BAM/BAI channels.
-   * Key = [sample_id, shard_id]
-   * This prevents collisions like sample1/0000-scattered vs sample2/0000-scattered.
+   * 5. One emitted BAM shard -> one Mutect task.
    */
-  shard_bams_ch = subset_res.shard_bams
-    .flatten()
-    .map { f ->
-      def m = f.name =~ /^(.+)\.(\d+-scattered)\.bam$/
-      if( !m.matches() )
-        error "Could not parse sample/shard from BAM name: ${f.name}"
+  mutect_inputs_ch = subset_res.shards
+    .flatMap { sid, tsample, nbam, nbai, bams, bais, intervals ->
 
-      def sid = m[0][1]
-      def shard = m[0][2]
+      def bam_list = bams instanceof List ? bams : [bams]
+      def bai_list = bais instanceof List ? bais : [bais]
+      def int_list = intervals instanceof List ? intervals : [intervals]
 
-      tuple([sid, shard], f)
+      bam_list = bam_list.sort { it.name }
+      bai_list = bai_list.sort { it.name }
+      int_list = int_list.sort { it.name }
+
+      bam_list.collect { bam ->
+
+        def m = bam.name =~ /^(.+)\.(\d+-scattered)\.bam$/
+        if( !m.matches() )
+          error "Could not parse sample/shard from BAM name: ${bam.name}"
+
+        def sample_from_bam = m[0][1]
+        def shard_id = m[0][2]
+
+        def bai = bai_list.find { it.name == "${sample_from_bam}.${shard_id}.bam.bai" }
+        if( bai == null )
+          error "Could not find BAI for BAM: ${bam.name}"
+
+        def interval = int_list.find { it.name == "${shard_id}.intervals" }
+        if( interval == null )
+          error "Could not find interval for shard: ${shard_id}"
+
+        tuple(
+          sid,
+          interval,
+          bam,
+          bai,
+          file(params.ref_fasta,         checkIfExists: true),
+          file(params.ref_fai,           checkIfExists: true),
+          file(params.ref_dict,          checkIfExists: true),
+          file(params.germline_resource, checkIfExists: true),
+          nbam,
+          nbai,
+          params.force_call_file
+            ? file(params.force_call_file, checkIfExists: true)
+            : file(NO_ALLELES_VCF_PATH, checkIfExists: true),
+          params.force_call_file_index
+            ? file(params.force_call_file_index, checkIfExists: true)
+            : file(NO_ALLELES_TBI_PATH, checkIfExists: true),
+          tsample,
+          params.m2_extra_args ?: ''
+        )
+      }
     }
 
-  shard_bais_ch = subset_res.shard_bais
-    .flatten()
-    .map { f ->
-      def m = f.name =~ /^(.+)\.(\d+-scattered)\.bam\.bai$/
-      if( !m.matches() )
-        error "Could not parse sample/shard from BAI name: ${f.name}"
-
-      def sid = m[0][1]
-      def shard = m[0][2]
-
-      tuple([sid, shard], f)
-    }
-
-  /*
-   * Intervals are shared across samples, so their key is only shard_id.
-   */
-  shard_intervals_ch = subset_res.shard_intervals
-    .flatten()
-    .unique { f -> f.name }
-    .map { f ->
-      def shard = f.name.replaceFirst(/\.intervals$/, '')
-      tuple(shard, f)
-    }
-
-  /*
-   * sample_meta is emitted once per sample per batch, so deduplicate by sample_id.
-   */
-  sample_meta_ch = subset_res.sample_meta
-    .unique { sid, tsample, nbam, nbai -> sid }
-    .map { sid, tsample, nbam, nbai ->
-      tuple(sid, tsample, nbam, nbai)
-    }
-
-  /*
-   * 6. Join BAM + BAI by [sample_id, shard_id],
-   * then attach interval by shard_id,
-   * then attach normal/tumor sample metadata by sample_id.
-   */
-  mutect_inputs_ch = shard_bams_ch
-    .join(shard_bais_ch)
-    .map { key, bam, bai ->
-      def sid = key[0]
-      def shard = key[1]
-      tuple(shard, sid, bam, bai)
-    }
-    .join(shard_intervals_ch)
-    .map { shard, sid, bam, bai, interval ->
-      tuple(sid, interval, bam, bai)
-    }
-    .join(sample_meta_ch)
-    .map { sid, interval, bam, bai, tsample, nbam, nbai ->
-      tuple(
-        sid,
-        interval,
-        bam,
-        bai,
-        file(params.ref_fasta,         checkIfExists: true),
-        file(params.ref_fai,           checkIfExists: true),
-        file(params.ref_dict,          checkIfExists: true),
-        file(params.germline_resource, checkIfExists: true),
-        nbam,
-        nbai,
-        tsample
-      )
-    }
-
-    /*
-   * 7. Build ONE complete tuple per Mutect task.
-   * This is what creates true fan-out: one emitted item = one mutect_wrapper job.
-   */
-  mutect_ready_ch = mutect_inputs_ch.map {
-    sid, interval, bam, bai, ref, fai, dict, germ, nbam, nbai, tsample ->
-
-      tuple(
-        sid,
-        interval,
-        bam,
-        bai,
-        ref,
-        fai,
-        dict,
-        germ,
-        nbam,
-        nbai,
-        params.force_call_file
-          ? file(params.force_call_file, checkIfExists: true)
-          : file(NO_ALLELES_VCF_PATH, checkIfExists: true),
-        params.force_call_file_index
-          ? file(params.force_call_file_index, checkIfExists: true)
-          : file(NO_ALLELES_TBI_PATH, checkIfExists: true),
-        tsample,
-        params.m2_extra_args ?: ''
-      )
+  mutect_inputs_ch.view { x ->
+    "MUTECT FANOUT: sample=${x[0]}, interval=${x[1].name}, bam=${x[2].name}"
   }
 
-  mutect_ready_ch.view { x ->
-    "FINAL MUTECT INPUT: sample=${x[0]}, interval=${x[1].name}, bam=${x[2].name}"
-  }
+  mutect_inputs_ch
+    .map { 1 }
+    .reduce { a, b -> a + b }
+    .view { n -> "TOTAL MUTECT TASKS EXPECTED: ${n}" }
 
   /*
-   * 8. Run Mutect2 once per sample-shard tuple.
+   * 6. Run Mutect2 once per BAM shard.
    */
-  mutect_res = mutect_wrapper(mutect_ready_ch)
+  mutect_res = mutect_wrapper(mutect_inputs_ch)
 
   /*
-   * 9. Gather per sample.
+   * 7. Gather per sample.
    */
   mutect_res.vcf
     .groupTuple(size: params.scatter_count as int)
