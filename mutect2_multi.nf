@@ -135,22 +135,20 @@ process mutect_wrapper {
   stageInMode 'symlink'
 
   input:
-    tuple(
-      val(sample_id),
-      path(interval_shard),
-      path(tumor_bam),
-      path(tumor_bam_index),
-      path(ref_fasta),
-      path(ref_fai),
-      path(ref_dict),
-      path(germline_resource)
-    )
-    path normal_bam
-    path normal_bam_index
-    path alleles_vcf
-    path alleles_vcf_tbi
-    val  tumor_sample
-    val  extra_args
+    tuple val(sample_id),
+          path(interval_shard),
+          path(tumor_bam),
+          path(tumor_bam_index),
+          path(ref_fasta),
+          path(ref_fai),
+          path(ref_dict),
+          path(germline_resource),
+          path(normal_bam),
+          path(normal_bam_index),
+          path(alleles_vcf),
+          path(alleles_vcf_tbi),
+          val(tumor_sample),
+          val(extra_args)
 
   output:
     tuple val(sample_id), path("*.vcf.gz"),     emit: vcf
@@ -391,38 +389,43 @@ workflow {
       )
     }
 
-  /*
-   * 7. Split inputs for mutect_wrapper signature.
-   * This also passes force_call_file when provided.
+    /*
+   * 7. Build ONE complete tuple per Mutect task.
+   * This is what creates true fan-out: one emitted item = one mutect_wrapper job.
    */
-  mutect_split_ch = mutect_inputs_ch.multiMap {
+  mutect_ready_ch = mutect_inputs_ch.map {
     sid, interval, bam, bai, ref, fai, dict, germ, nbam, nbai, tsample ->
 
-      main:        tuple(sid, interval, bam, bai, ref, fai, dict, germ)
-      nbam:        nbam
-      nbai:        nbai
-      alleles:     params.force_call_file
-                     ? file(params.force_call_file, checkIfExists: true)
-                     : file(NO_ALLELES_VCF_PATH, checkIfExists: true)
-      alleles_tbi: params.force_call_file_index
-                     ? file(params.force_call_file_index, checkIfExists: true)
-                     : file(NO_ALLELES_TBI_PATH, checkIfExists: true)
-      tsample:     tsample
-      extra:       params.m2_extra_args ?: ''
+      tuple(
+        sid,
+        interval,
+        bam,
+        bai,
+        ref,
+        fai,
+        dict,
+        germ,
+        nbam,
+        nbai,
+        params.force_call_file
+          ? file(params.force_call_file, checkIfExists: true)
+          : file(NO_ALLELES_VCF_PATH, checkIfExists: true),
+        params.force_call_file_index
+          ? file(params.force_call_file_index, checkIfExists: true)
+          : file(NO_ALLELES_TBI_PATH, checkIfExists: true),
+        tsample,
+        params.m2_extra_args ?: ''
+      )
+  }
+
+  mutect_ready_ch.view { x ->
+    "FINAL MUTECT INPUT: sample=${x[0]}, interval=${x[1].name}, bam=${x[2].name}"
   }
 
   /*
-   * 8. Run Mutect2 once per sample-shard BAM.
+   * 8. Run Mutect2 once per sample-shard tuple.
    */
-  mutect_res = mutect_wrapper(
-    mutect_split_ch.main,
-    mutect_split_ch.nbam,
-    mutect_split_ch.nbai,
-    mutect_split_ch.alleles,
-    mutect_split_ch.alleles_tbi,
-    mutect_split_ch.tsample,
-    mutect_split_ch.extra
-  )
+  mutect_res = mutect_wrapper(mutect_ready_ch)
 
   /*
    * 9. Gather per sample.
