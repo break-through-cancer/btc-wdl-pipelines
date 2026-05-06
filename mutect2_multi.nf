@@ -9,6 +9,9 @@ new File(NO_NORMAL_BAI_PATH).createNewFile()
 new File(NO_ALLELES_VCF_PATH).createNewFile()
 new File(NO_ALLELES_TBI_PATH).createNewFile()
 
+if( !params.containsKey('merge_all_sample_vcfs') )
+  params.merge_all_sample_vcfs = false
+  
 if( !params.containsKey('tumor_sample') )
   params.tumor_sample = null
 
@@ -279,6 +282,46 @@ process gather_vcfs {
   """
 }
 
+process merge_all_sample_vcfs {
+  label 'process_medium'
+  container 'quay.io/biocontainers/bcftools:1.20--h8b25389_0'
+
+  input:
+    path vcfs
+    path tbis
+
+  output:
+    path "all_samples.merged.vcf.gz",     emit: vcf
+    path "all_samples.merged.vcf.gz.tbi", emit: tbi
+
+  script:
+  """
+  set -euo pipefail
+
+  echo "=== INPUT SAMPLE-LEVEL VCFS ==="
+  ls -lh *.merged.vcf.gz
+
+  ls -1 *.merged.vcf.gz | sort > sample_vcfs.list
+
+  echo "=== SAMPLE NAMES ==="
+  while read f; do
+    echo "\$f"
+    bcftools query -l "\$f"
+  done < sample_vcfs.list
+
+  bcftools merge \
+    --force-samples \
+    -Oz \
+    -o all_samples.merged.vcf.gz \
+    --file-list sample_vcfs.list
+
+  tabix -f -p vcf all_samples.merged.vcf.gz
+
+  echo "=== FINAL COHORT VCF ==="
+  ls -lh all_samples.merged.vcf.gz all_samples.merged.vcf.gz.tbi
+  """
+}
+
 workflow {
 
   /*
@@ -404,12 +447,39 @@ workflow {
    */
   mutect_res = mutect_wrapper(mutect_inputs_ch)
 
-  /*
-   * 7. Gather per sample.
+     /*
+   * 7. Gather per-shard Mutect VCFs into one merged VCF per sample.
+   *    This is sample-level stitching, not cross-sample merging.
    */
   mutect_res.vcf
     .groupTuple(size: params.scatter_count as int)
     .set { grouped_vcfs_ch }
 
-  gather_vcfs(grouped_vcfs_ch)
+  gathered_mutect_res = gather_vcfs(grouped_vcfs_ch)
+
+  gathered_mutect_res.vcf.view { sid, vcf ->
+    "MERGED MUTECT VCF PER SAMPLE: sample=${sid}, vcf=${vcf}"
+  }
+
+  /*
+   * 8. Optionally merge all per-sample VCFs into one cohort-level VCF.
+   */
+  if( params.gather_mutect_vcfs ) {
+
+    gathered_mutect_res.vcf
+      .map { sid, vcf -> vcf }
+      .collect()
+      .set { all_sample_vcfs_ch }
+
+    gathered_mutect_res.tbi
+      .map { sid, tbi -> tbi }
+      .collect()
+      .set { all_sample_tbis_ch }
+
+    merge_all_sample_vcfs(all_sample_vcfs_ch, all_sample_tbis_ch)
+
+  } else {
+    log.info "Skipping cross-sample VCF merge because params.gather_mutect_vcfs=false"
+  }
+
 }

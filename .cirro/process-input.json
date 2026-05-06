@@ -19,5 +19,6 @@
     "minimum_allele_frequency": "0.0",
     "mem_gb": "16",
     "disk_space_gb": "30",
-    "boot_disk_size_gb": "30"
+    "boot_disk_size_gb": "30",
+    "merge_all_sample_vcfs": "$.dataset.params.merge_all_sample_vcfs"
 }

@@ -67,6 +67,12 @@
         "description": "number of intervals to extract per batch",
         "type": "integer",
         "default":10
+      },
+      "merge_all_sample_vcfs": {
+        "title": "merge all sample vcfs",
+        "description": "Whether to merge all sample VCFs into one cohort-level VCF.",
+        "type": "boolean",
+        "default": false
       }
     },
     "required": [
