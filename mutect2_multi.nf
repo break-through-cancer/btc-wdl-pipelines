@@ -464,7 +464,7 @@ workflow {
   /*
    * 8. Optionally merge all per-sample VCFs into one cohort-level VCF.
    */
-  if( params.gather_mutect_vcfs ) {
+  if( params.merge_all_sample_vcfs ) {
 
     gathered_mutect_res.vcf
       .map { sid, vcf -> vcf }
