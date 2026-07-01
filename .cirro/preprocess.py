@@ -41,9 +41,9 @@ def yield_single_inputs(ds: PreprocessDataset):
         variant_vcf_to_funcotate_index = None
 
         for f in group["file"]:
-            if f.endswith(".mutect2.filtered.vcf.gz"):
+            if f.endswith(".vcf.gz"):
                 variant_vcf_to_funcotate = f
-            elif f.endswith(".mutect2.filtered.vcf.gz.tbi"):
+            elif f.endswith(".vcf.gz.tbi"):
                 variant_vcf_to_funcotate_index = f
 
         if variant_vcf_to_funcotate and variant_vcf_to_funcotate_index:
