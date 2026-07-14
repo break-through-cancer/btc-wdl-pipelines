@@ -27,3 +27,5 @@ work/
 *.fai
 *.dict
 
+tumor_only/
+venv/

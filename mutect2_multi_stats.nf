@@ -162,9 +162,10 @@ process mutect_wrapper {
           val(extra_args)
 
   output:
-    tuple val(sample_id), path("*.vcf.gz"),     emit: vcf
-    tuple val(sample_id), path("*.vcf.gz.tbi"), emit: tbi
-    path "versions.yml",                        emit: versions
+    tuple val(sample_id), path("*.vcf.gz"),       emit: vcf
+    tuple val(sample_id), path("*.vcf.gz.tbi"),   emit: tbi
+    tuple val(sample_id), path("*.vcf.gz.stats"), emit: stats
+    path "versions.yml",                          emit: versions
 
   shell:
   '''
@@ -246,39 +247,152 @@ process mutect_wrapper {
     ${extra_args} \
     --output "${out_prefix}.vcf.gz"
 
+  test -s "${out_prefix}.vcf.gz"
+  test -s "${out_prefix}.vcf.gz.tbi"
+  test -s "${out_prefix}.vcf.gz.stats"
+
   ( gatk --version > versions.yml 2>&1 || echo "gatk --version failed (non-fatal)" > versions.yml )
 
   echo "=== mutect_wrapper DONE ==="
   '''
 }
 
-process gather_vcfs {
+process gather_mutect_outputs {
   label 'process_medium'
   container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
 
   tag "${sample_id}"
 
   input:
-    tuple val(sample_id), path(vcfs)
+    tuple val(sample_id), path(vcfs), path(stats)
 
   output:
-    tuple val(sample_id), path("${sample_id}.merged.vcf.gz"),     emit: vcf
-    tuple val(sample_id), path("${sample_id}.merged.vcf.gz.tbi"), emit: tbi
+    tuple val(sample_id),
+          path("${sample_id}.merged.vcf.gz"),
+          path("${sample_id}.merged.vcf.gz.tbi"),
+          path("${sample_id}.merged.vcf.gz.stats"),
+          emit: calls
+
+    tuple val(sample_id), path("${sample_id}.merged.vcf.gz"),       emit: vcf
+    tuple val(sample_id), path("${sample_id}.merged.vcf.gz.tbi"),   emit: tbi
+    tuple val(sample_id), path("${sample_id}.merged.vcf.gz.stats"), emit: stats
 
   script:
   """
   set -euo pipefail
 
-  find . -maxdepth 1 -type f -name '*.vcf.gz' -print | sort > vcfs.list
+  echo "=== GATHER MUTECT OUTPUTS: ${sample_id} ==="
 
-  sed -E 's/.*out\\.([0-9]+).*/\\1\\t&/' vcfs.list | sort -k1,1n | cut -f2- > vcfs.sorted.list
+  find . -maxdepth 1 -type f -name 'out.*.vcf.gz' -print \
+    | sed -E 's/.*out\.([0-9]+)-scattered\.vcf\.gz/\1\t&/' \
+    | sort -k1,1n \
+    | cut -f2- \
+    > vcfs.sorted.list
+
+  find . -maxdepth 1 -type f -name 'out.*.vcf.gz.stats' -print \
+    | sed -E 's/.*out\.([0-9]+)-scattered\.vcf\.gz\.stats/\1\t&/' \
+    | sort -k1,1n \
+    | cut -f2- \
+    > stats.sorted.list
+
+  vcf_count=\$(wc -l < vcfs.sorted.list)
+  stats_count=\$(wc -l < stats.sorted.list)
+
+  echo "VCF shards: \$vcf_count"
+  echo "Stats shards: \$stats_count"
+
+  if [[ "\$vcf_count" -ne "\$stats_count" ]]; then
+    echo "ERROR: Number of VCF files (\$vcf_count) does not match number of stats files (\$stats_count)" >&2
+    exit 1
+  fi
+
+  if [[ "\$vcf_count" -ne ${params.scatter_count as int} ]]; then
+    echo "ERROR: Expected ${params.scatter_count as int} shards but found \$vcf_count" >&2
+    exit 1
+  fi
+
   awk '{print "--INPUT", \$0}' vcfs.sorted.list > gather.args
 
-  gatk GatherVcfs --arguments_file gather.args -O ${sample_id}.merged.vcf.gz
+  gatk --java-options "-Xmx8g -XX:-UsePerfData" GatherVcfs \
+    --arguments_file gather.args \
+    -O ${sample_id}.merged.vcf.gz
 
-  if [ ! -s ${sample_id}.merged.vcf.gz.tbi ]; then
-    tabix -f -p vcf ${sample_id}.merged.vcf.gz || gatk IndexFeatureFile -I ${sample_id}.merged.vcf.gz
+  if [[ ! -s ${sample_id}.merged.vcf.gz.tbi ]]; then
+    tabix -f -p vcf ${sample_id}.merged.vcf.gz \
+      || gatk IndexFeatureFile -I ${sample_id}.merged.vcf.gz
   fi
+
+  stats_args=()
+  while IFS= read -r stats_file; do
+    stats_args+=(-stats "\$stats_file")
+  done < stats.sorted.list
+
+  gatk --java-options "-Xmx8g -XX:-UsePerfData" MergeMutectStats \
+    "\${stats_args[@]}" \
+    -O ${sample_id}.merged.vcf.gz.stats
+
+  test -s ${sample_id}.merged.vcf.gz
+  test -s ${sample_id}.merged.vcf.gz.tbi
+  test -s ${sample_id}.merged.vcf.gz.stats
+
+  echo "=== GATHERED OUTPUTS ==="
+  ls -lh \
+    ${sample_id}.merged.vcf.gz \
+    ${sample_id}.merged.vcf.gz.tbi \
+    ${sample_id}.merged.vcf.gz.stats
+  """
+}
+
+process filter_mutect_calls {
+  label 'process_medium'
+  container "${params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'}"
+
+  tag "${sample_id}"
+
+  input:
+    tuple val(sample_id),
+          path(vcf),
+          path(vcf_tbi),
+          path(stats)
+    path ref_fasta
+    path ref_fai
+    path ref_dict
+
+  output:
+    tuple val(sample_id), path("${sample_id}.filtered.vcf.gz"),       emit: vcf
+    tuple val(sample_id), path("${sample_id}.filtered.vcf.gz.tbi"),   emit: tbi
+    tuple val(sample_id), path("${sample_id}.filteringStats.tsv"),    emit: stats
+
+  script:
+  """
+  set -euo pipefail
+
+  echo "=== FILTER MUTECT CALLS: ${sample_id} ==="
+  echo "VCF: ${vcf}"
+  echo "Stats: ${stats}"
+
+  gatk --java-options "-Xmx8g -XX:-UsePerfData" FilterMutectCalls \
+    -R ${ref_fasta} \
+    -V ${vcf} \
+    -stats ${stats} \
+    -O ${sample_id}.filtered.vcf.gz \
+    --filtering-stats ${sample_id}.filteringStats.tsv \
+    --tmp-dir .
+
+  if [[ ! -s ${sample_id}.filtered.vcf.gz.tbi ]]; then
+    tabix -f -p vcf ${sample_id}.filtered.vcf.gz \
+      || gatk IndexFeatureFile -I ${sample_id}.filtered.vcf.gz
+  fi
+
+  test -s ${sample_id}.filtered.vcf.gz
+  test -s ${sample_id}.filtered.vcf.gz.tbi
+  test -s ${sample_id}.filteringStats.tsv
+
+  echo "=== FILTERED OUTPUTS ==="
+  ls -lh \
+    ${sample_id}.filtered.vcf.gz \
+    ${sample_id}.filtered.vcf.gz.tbi \
+    ${sample_id}.filteringStats.tsv
   """
 }
 
@@ -482,27 +596,53 @@ workflow {
    * 7. Gather per-shard Mutect VCFs into one merged VCF per sample.
    *    This is sample-level stitching, not cross-sample merging.
    */
-  mutect_res.vcf
+  grouped_vcfs_ch = mutect_res.vcf
     .groupTuple(size: params.scatter_count as int)
-    .set { grouped_vcfs_ch }
 
-  gathered_mutect_res = gather_vcfs(grouped_vcfs_ch)
+  grouped_stats_ch = mutect_res.stats
+    .groupTuple(size: params.scatter_count as int)
+
+  grouped_mutect_outputs_ch = grouped_vcfs_ch
+    .join(grouped_stats_ch)
+    .map { sample_id, vcfs, stats ->
+      tuple(sample_id, vcfs, stats)
+    }
+
+  grouped_mutect_outputs_ch.view { sample_id, vcfs, stats ->
+    "GATHER INPUT: sample=${sample_id}, vcfs=${vcfs.size()}, stats=${stats.size()}"
+  }
+
+  gathered_mutect_res = gather_mutect_outputs(grouped_mutect_outputs_ch)
 
   gathered_mutect_res.vcf.view { sid, vcf ->
     "MERGED MUTECT VCF PER SAMPLE: sample=${sid}, vcf=${vcf}"
   }
 
   /*
-   * 8. Optionally merge all per-sample VCFs into one cohort-level VCF.
+   * 8. Filter each gathered per-sample Mutect2 VCF using its merged stats.
+   */
+  filtered_mutect_res = filter_mutect_calls(
+    gathered_mutect_res.calls,
+    file(params.ref_fasta, checkIfExists: true),
+    file(params.ref_fai,   checkIfExists: true),
+    file(params.ref_dict,  checkIfExists: true)
+  )
+
+  filtered_mutect_res.vcf.view { sid, vcf ->
+    "FILTERED MUTECT VCF PER SAMPLE: sample=${sid}, vcf=${vcf}"
+  }
+
+  /*
+   * 9. Optionally merge all filtered per-sample VCFs into one cohort-level VCF.
    */
   if( params.merge_all_sample_vcfs ) {
 
-    gathered_mutect_res.vcf
+    filtered_mutect_res.vcf
       .map { sid, vcf -> vcf }
       .collect()
       .set { all_sample_vcfs_ch }
 
-    gathered_mutect_res.tbi
+    filtered_mutect_res.tbi
       .map { sid, tbi -> tbi }
       .collect()
       .set { all_sample_tbis_ch }
@@ -510,7 +650,7 @@ workflow {
     merge_all_sample_vcfs(all_sample_vcfs_ch, all_sample_tbis_ch)
 
   } else {
-    log.info "Skipping cross-sample VCF merge because params.gather_mutect_vcfs=false"
+    log.info "Skipping cross-sample VCF merge because params.merge_all_sample_vcfs=false"
   }
 
 }

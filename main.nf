@@ -746,7 +746,7 @@ workflow {
 
 //   // localize full tumor BAM once, extract tumor sample once, create shard BAMs once
 //   subset_res = subset_tumor_per_shard(
-//     Channel.of([
+//     Channel.of(
 //       [id: 'tumor'],
 //       file(params.tumor_reads, checkIfExists: true),
 //       file(params.tumor_reads_index, checkIfExists: true)
