@@ -273,10 +273,6 @@ process gather_mutect_outputs {
           path("${sample_id}.merged.vcf.gz.stats"),
           emit: calls
 
-    tuple val(sample_id), path("${sample_id}.merged.vcf.gz"),       emit: vcf
-    tuple val(sample_id), path("${sample_id}.merged.vcf.gz.tbi"),   emit: tbi
-    tuple val(sample_id), path("${sample_id}.merged.vcf.gz.stats"), emit: stats
-
   script:
   """
   set -euo pipefail
@@ -284,13 +280,13 @@ process gather_mutect_outputs {
   echo "=== GATHER MUTECT OUTPUTS: ${sample_id} ==="
 
   find . -maxdepth 1 -type f -name 'out.*.vcf.gz' -print \
-    | sed -E 's/.*out\.([0-9]+)-scattered\.vcf\.gz/\1\t&/' \
+    | sed -E 's/.*out\\.([0-9]+)-scattered\\.vcf\\.gz/\\1\\t&/' \
     | sort -k1,1n \
     | cut -f2- \
     > vcfs.sorted.list
 
   find . -maxdepth 1 -type f -name 'out.*.vcf.gz.stats' -print \
-    | sed -E 's/.*out\.([0-9]+)-scattered\.vcf\.gz\.stats/\1\t&/' \
+    | sed -E 's/.*out\\.([0-9]+)-scattered\\.vcf\\.gz\\.stats/\\1\\t&/' \
     | sort -k1,1n \
     | cut -f2- \
     > stats.sorted.list
@@ -413,14 +409,14 @@ process merge_all_sample_vcfs {
   set -euo pipefail
 
   echo "=== INPUT SAMPLE-LEVEL VCFS ==="
-  ls -lh *.merged.vcf.gz
+  ls -lh *.filtered.vcf.gz
 
   rm -f tumor_vcfs.list
   mkdir -p tumor_only_vcfs
 
   echo "=== FILTERING OUT PBMC/NORMAL SAMPLES ==="
 
-  for f in \$(ls -1 *.merged.vcf.gz | sort); do
+  for f in \$(find . -maxdepth 1 -type f -name '*.filtered.vcf.gz' -print | sort); do
     echo "Input: \$f"
 
     tumor_samples=\$(bcftools query -l "\$f" | grep -viE 'PBMC|NORMAL|BLOOD' || true)
@@ -614,7 +610,7 @@ workflow {
 
   gathered_mutect_res = gather_mutect_outputs(grouped_mutect_outputs_ch)
 
-  gathered_mutect_res.vcf.view { sid, vcf ->
+  gathered_mutect_res.calls.view { sid, vcf, tbi, stats ->
     "MERGED MUTECT VCF PER SAMPLE: sample=${sid}, vcf=${vcf}"
   }
 
