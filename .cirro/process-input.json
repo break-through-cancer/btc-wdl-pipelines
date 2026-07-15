@@ -9,7 +9,7 @@
     "m2_extra_args": "$.dataset.params.m2_extra_args",
     "cpu": "$.dataset.params.cpu",
     "mem": "$.dataset.params.mem",
-    "gatk_docker": "broadinstitute/gatk:4.0.11.0",
+    "gatk_docker": "broadinstitute/gatk:4.5.0.0",
     "germline_resource": "$.dataset.params.germline_resource",
     "intervals": "$.dataset.params.intervals",
     "force_call_file": "$.dataset.params.force_call_file",
