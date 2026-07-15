@@ -39,7 +39,7 @@ process split_intervals {
     val scatter_count
 
   output:
-    path "scattered/*.intervals", emit: interval_shards
+    path "scattered/*.interval_list", emit: interval_shards
 
   script:
   """
@@ -79,7 +79,7 @@ process subset_tumor_all_shards {
           path(normal_bam_index),
           path("subset_bams/*.bam"),
           path("subset_bams/*.bam.bai"),
-          path("out_intervals/*.intervals"),
+          path("out_intervals/*.interval_list"),
           emit: shards
 
   script:
@@ -87,7 +87,7 @@ process subset_tumor_all_shards {
   set -euo pipefail
 
   mkdir -p subset_bams regions out_intervals
-  cp intervals/*.intervals out_intervals/
+  cp intervals/*.interval_list out_intervals/
 
   echo "=== subset_tumor_all_shards START ==="
   echo "sample=${meta.id}"
@@ -95,16 +95,16 @@ process subset_tumor_all_shards {
   ls -lh "${tumor_bam}" || true
 
   echo "interval count:"
-  ls intervals/*.intervals | wc -l
+  ls intervals/*.interval_list | wc -l
 
   echo "first intervals:"
-  ls intervals/*.intervals | head
+  ls intervals/*.interval_list | head
 
   threads=\$(( ${task.cpus} > 1 ? ${task.cpus} - 1 : 1 ))
   echo "threads=\$threads"
 
-  for interval_file in intervals/*.intervals; do
-    shard_id=\$(basename "\$interval_file" .intervals)
+  for interval_file in intervals/*.interval_list; do
+    shard_id=\$(basename "\$interval_file" .interval_list)
 
     echo "=== START shard=\${shard_id} at \$(date) ==="
 
@@ -135,7 +135,7 @@ process subset_tumor_all_shards {
   echo -n "BAIs: "
   ls subset_bams/*.bam.bai | wc -l
   echo -n "Intervals: "
-  ls out_intervals/*.intervals | wc -l
+  ls out_intervals/*.interval_list | wc -l
   echo "=== subset_tumor_all_shards DONE ==="
   """
 }
@@ -171,7 +171,7 @@ process mutect_wrapper {
   '''
   set -euo pipefail
 
-  shard_base=$(basename "!{interval_shard}" .intervals)
+  shard_base=$(basename "!{interval_shard}" .interval_list)
   tumor_bam="!{tumor_bam}"
   tumor_bam_index="!{tumor_bam_index}"
   interval_shard="!{interval_shard}"
@@ -547,7 +547,7 @@ workflow {
         if( bai == null )
           error "Could not find BAI for BAM: ${bam.name}"
 
-        def interval = int_list.find { it.name == "${shard_id}.intervals" }
+        def interval = int_list.find { it.name == "${shard_id}.interval_list" }
         if( interval == null )
           error "Could not find interval for shard: ${shard_id}"
 
