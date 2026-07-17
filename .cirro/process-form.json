@@ -73,6 +73,22 @@
         "description": "Whether to merge all sample VCFs into one cohort-level VCF.",
         "type": "boolean",
         "default": false
+      },
+      "panel_of_normals": {
+        "title": "panel_of_normals",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
+      "panel_of_normals_index": {
+        "title": "panel_of_normals_index",
+        "description": "",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
       }
     },
     "required": [

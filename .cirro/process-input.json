@@ -20,5 +20,7 @@
     "mem_gb": "16",
     "disk_space_gb": "30",
     "boot_disk_size_gb": "30",
-    "merge_all_sample_vcfs": "$.dataset.params.merge_all_sample_vcfs"
+    "merge_all_sample_vcfs": "$.dataset.params.merge_all_sample_vcfs",
+    "panel_of_normals": "$.dataset.params.panel_of_normals",
+    "panel_of_normals_index": "$.dataset.params.panel_of_normals_index"
 }
