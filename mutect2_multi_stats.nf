@@ -519,14 +519,14 @@ process gather_pileup_summaries {
   done < normal.sorted.list
 
   gatk --java-options "-Xmx8g -XX:-UsePerfData" GatherPileupSummaries \
-    "\${tumor_args[@]}" \
+    "${tumor_args[@]}" \
     --sequence-dictionary "${ref_dict}" \
-    --output "${sample_id}.tumor.pileups.table"
+    -O "${sample_id}.tumor.pileups.table"
 
   gatk --java-options "-Xmx8g -XX:-UsePerfData" GatherPileupSummaries \
-    "\${normal_args[@]}" \
+    "${normal_args[@]}" \
     --sequence-dictionary "${ref_dict}" \
-    --output "${sample_id}.normal.pileups.table"
+    -O "${sample_id}.normal.pileups.table"
 
   test -s "${sample_id}.tumor.pileups.table"
   test -s "${sample_id}.normal.pileups.table"
