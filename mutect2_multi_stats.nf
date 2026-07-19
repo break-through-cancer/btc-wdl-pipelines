@@ -508,7 +508,7 @@ process gather_pileup_summaries {
     exit 1
   fi
 
-  tumor_args=()
+    tumor_args=()
   while IFS= read -r table_file; do
     tumor_args+=(-I "\${table_file}")
   done < tumor.sorted.list
@@ -519,12 +519,12 @@ process gather_pileup_summaries {
   done < normal.sorted.list
 
   gatk --java-options "-Xmx8g -XX:-UsePerfData" GatherPileupSummaries \
-    "${tumor_args[@]}" \
+    "\${tumor_args[@]}" \
     --sequence-dictionary "${ref_dict}" \
     -O "${sample_id}.tumor.pileups.table"
 
   gatk --java-options "-Xmx8g -XX:-UsePerfData" GatherPileupSummaries \
-    "${normal_args[@]}" \
+    "\${normal_args[@]}" \
     --sequence-dictionary "${ref_dict}" \
     -O "${sample_id}.normal.pileups.table"
 
