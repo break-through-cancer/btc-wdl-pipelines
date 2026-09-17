@@ -47,9 +47,9 @@ def setup_inputs_single(ds: PreprocessDataset):
 
 def yield_single_inputs(ds: PreprocessDataset) -> dict:
     """
-    This function processes the samplesheet and identifies each of the BAM/BAI pairs
-    for tumor and normal samples, and assigns the corresponding files to the appropriate
-    fields based on the input dataset.
+    This function processes the samplesheet and identifies each of the alignment/index
+    pairs (BAM/BAI or CRAM/CRAI) for tumor and normal samples, and assigns the
+    corresponding files to the appropriate fields based on the input dataset.
     """
     
     for patient, group in ds.samplesheet.groupby("patient"):
@@ -76,15 +76,18 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
             }
 
             for file in normal_files["file"].values:
-                for suffix, key in [(".bam", "normal_input_bam"), (".bai", "normal_input_bam_index")]:
+                for suffix, key in [
+                    (".bam", "normal_input_bam"), (".cram", "normal_input_bam"),
+                    (".bai", "normal_input_bam_index"), (".crai", "normal_input_bam_index"),
+                ]:
                     if file.endswith(suffix):
                         if normal_dat[key] is not None:
                             raise ValueError(f"Multiple '{suffix}' files found for normal sample {normal_sample_id}")
                         normal_dat[key] = file
 
-            # Ensure both BAM and BAM index are found for the normal sample
+            # Ensure both an alignment file and its index are found for the normal sample
             if normal_dat["normal_input_bam"] is None or normal_dat["normal_input_bam_index"] is None:
-                ds.logger.info(f"Normal sample {normal_sample_id} is missing BAM or BAM index files; skipping.")
+                ds.logger.info(f"Normal sample {normal_sample_id} is missing an alignment (BAM/CRAM) or index file; skipping.")
                 continue
 
             # Process each tumor sample for the patient
@@ -100,15 +103,18 @@ def yield_single_inputs(ds: PreprocessDataset) -> dict:
                     "tumor_input_bam_index": None,
                 }
                 for file in tumor_files["file"].values:
-                    for suffix, key in [(".bam", "tumor_input_bam"), (".bai", "tumor_input_bam_index")]:
+                    for suffix, key in [
+                        (".bam", "tumor_input_bam"), (".cram", "tumor_input_bam"),
+                        (".bai", "tumor_input_bam_index"), (".crai", "tumor_input_bam_index"),
+                    ]:
                         if file.endswith(suffix):
                             if tumor_dat[key] is not None:
                                 raise ValueError(f"Multiple '{suffix}' files found for tumor sample {tumor_sample_id}")
                             tumor_dat[key] = file
 
-                # Ensure both BAM and BAM index are found for the tumor sample
+                # Ensure both an alignment file and its index are found for the tumor sample
                 if tumor_dat["tumor_input_bam"] is None or tumor_dat["tumor_input_bam_index"] is None:
-                    ds.logger.info(f"Tumor sample {tumor_sample_id} is missing BAM or BAM index files; skipping.")
+                    ds.logger.info(f"Tumor sample {tumor_sample_id} is missing an alignment (BAM/CRAM) or index file; skipping.")
                     continue
 
                 # Validate that the sex matches between the normal and tumor samples

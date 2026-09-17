@@ -34,30 +34,30 @@
       "tumor_input_bam": {
         "type": "string",
         "title": "tumor_input_bam",
-        "description": "",
+        "description": "Alignment file (BAM or CRAM)",
         "pathType": "dataset",
-        "file": "**/*.bam"
+        "file": "**/*.{bam,cram}"
       },
       "tumor_input_bam_index": {
         "type": "string",
         "title": "tumor_input_bam_index",
-        "description": "",
+        "description": "Alignment index file (.bam.bai or .cram.crai)",
         "pathType": "dataset",
-        "file": "**/*.bam.bai"
+        "file": "**/*.{bam.bai,cram.crai}"
       },
       "normal_input_bam": {
         "type": "string",
         "title": "normal_input_bam",
-        "description": "",
+        "description": "Alignment file (BAM or CRAM)",
         "pathType": "dataset",
-        "file": "**/*.bam"
+        "file": "**/*.{bam,cram}"
       },
       "normal_input_bam_index": {
         "type": "string",
         "title": "normal_input_bam_index",
-        "description": "",
+        "description": "Alignment index file (.bam.bai or .cram.crai)",
         "pathType": "dataset",
-        "file": "**/*.bam.bai"
+        "file": "**/*.{bam.bai,cram.crai}"
       },
       "sample_sex": {
         "type": "string",
