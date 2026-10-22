@@ -92,12 +92,10 @@ task HaplotypeCaller {
 
   parameter_meta {
     input_bam: {
-      description: "a bam file",
-      localization_optional: true
+      description: "a bam file"
     }
     input_bam_index: {
-      description: "an index file for the bam input",
-      localization_optional: true
+      description: "an index file for the bam input"
     }
   }
   command {
@@ -266,12 +264,10 @@ task CollectReadCounts {
 
   parameter_meta {
     input_bam: {
-      description: "a bam file",
-      localization_optional: true
+      description: "a bam file"
     }
     input_bam_index: {
-      description: "an index file for the bam input",
-      localization_optional: true
+      description: "an index file for the bam input"
     }
   }
   command {
