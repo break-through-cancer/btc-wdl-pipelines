@@ -49,12 +49,6 @@ task SplitIntervalList {
     String gatk_docker = "us.gcr.io/broad-gatk/gatk:4.2.6.1"
   }
 
-  parameter_meta {
-    interval_list: {
-      localization_optional: true
-    }
-  }
-
   command <<<
     gatk --java-options "-Xms3000m -Xmx3250m" SplitIntervals \
       -L ~{interval_list} -O  scatterDir -scatter ~{scatter_count} -R ~{ref_fasta} \
@@ -157,12 +151,6 @@ task GenotypeGVCFs {
     # This is needed for gVCFs generated with GATK3 HaplotypeCaller
     Boolean allow_old_rms_mapping_quality_annotation_data = false
     String gatk_docker = "us.gcr.io/broad-gatk/gatk:4.2.6.1"
-  }
-
-  parameter_meta {
-    interval: {
-      localization_optional: true
-    }
   }
 
   command <<<
@@ -654,12 +642,6 @@ task GatherVcfs {
     String gatk_docker = "us.gcr.io/broad-gatk/gatk:4.2.6.1"
   }
 
-  parameter_meta {
-    input_vcfs: {
-      localization_optional: true
-    }
-  }
-
   command <<<
     set -euo pipefail
 
@@ -701,12 +683,6 @@ task SelectFingerprintSiteVariants {
     String base_output_name
     Int disk_size
     String gatk_docker = "us.gcr.io/broad-gatk/gatk:4.2.6.1"
-  }
-
-  parameter_meta {
-    input_vcf: {
-      localization_optional: true
-    }
   }
 
   command <<<
@@ -879,15 +855,6 @@ task CrossCheckFingerprint {
     Boolean scattered = false
     Array[String] expected_inconclusive_samples = []
     String gatk_docker = "us.gcr.io/broad-gatk/gatk:4.2.6.1"
-  }
-
-  parameter_meta {
-    gvcf_paths: {
-      localization_optional: true
-    }
-    vcf_paths: {
-      localization_optional: true
-    }
   }
 
   Int num_gvcfs = length(gvcf_paths)
